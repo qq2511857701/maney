@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>散光软镜度数换算工具</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>散光软镜度数换算工具</h1>
+      <p>粘贴客户验光数据，自动换算试戴片参数（顶点距离 12mm）</p>
+    </header>
+
+    <div class="deploy-hint" id="deployHint" hidden></div>
+
+    <section class="card">
+      <h2>① 输入数据</h2>
+      <textarea
+        id="textInput"
+        placeholder="支持多种格式，例如：&#10;&#10;【聊天格式】&#10;右眼(R) 近视525度(-5.25) 散光100度(-1.00) 轴位180°&#10;左眼(L) 近视450度(-4.50) 散光200度(-2.00) 轴位170°&#10;&#10;【验光单格式】&#10;OD: -5.75 / -1.25 x 10&#10;OS: -7.00 / -0.75 x 160&#10;R: -10.00 / -2.00 x 175&#10;L: -9.00 / -2.00 x 30&#10;&#10;【订单行】&#10;-3.50，100，179（1盒）&#10;-2.75, 125, 180"
+      ></textarea>
+
+      <p class="hint" id="parseHint"></p>
+
+      <div class="actions">
+        <button class="btn btn-secondary" id="btnParse">解析文本</button>
+        <button class="btn btn-secondary" id="btnClear">全部清除</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>② 校对数据（可修改）</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>眼别</th>
+              <th>球镜</th>
+              <th>柱镜</th>
+              <th>轴位</th>
+              <th>盒数</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="reviewBody">
+            <tr><td colspan="6" class="empty-state">请先粘贴验光数据并点击「解析文本」</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="btn btn-secondary" id="btnAddRow">+ 添加一行</button>
+        <button class="btn btn-primary" id="btnConvert">换算</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>③ 换算结果</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>眼别</th>
+              <th>原始</th>
+              <th class="arrow">→</th>
+              <th>换算后</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="resultBody">
+            <tr><td colspan="5" class="empty-state">校对后点击「换算」查看结果</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btnCopy" disabled>复制结果</button>
+      </div>
+    </section>
+
+    <footer>
+      换算算法与安视优散光验配计算器一致 · 仅供工作参考，不能替代专业验配
+    </footer>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
