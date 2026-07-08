@@ -3,4 +3,5 @@ test.mjs
 server.mjs
 package.json
 package-lock.json
-scripts/
+scripts/*
+!scripts/lensfit-cart.user.js
