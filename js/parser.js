@@ -36,6 +36,12 @@ export function normalizeOcrText(text) {
   t = t.replace(/\bR\s*[：:]/gi, 'R:');
   t = t.replace(/\bL\s*[：:]/gi, 'L:');
 
+  // 5.25- 2.00 180 → -5.25, -2.00, 180（省略负号/负号错位）
+  t = t.replace(
+    /(\d+\.\d+)\s*-\s*(-?\d+\.?\d*)\s*([，,\s]+)(\d+)/g,
+    '-$1, $2, $4'
+  );
+
   return t;
 }
 
@@ -43,6 +49,8 @@ function parseSphere(raw) {
   if (raw == null || raw === '') return null;
   let s = String(raw).trim().replace(/[度°DSds]/gi, '');
   if (/^\(([-\d.]+)\)$/.test(s)) s = s.slice(1, -1);
+  // 5.25- 末尾负号
+  if (/^\d+\.\d+-$/.test(s)) s = '-' + s.slice(0, -1);
 
   if (/^-?\d+$/.test(s) && !s.includes('.')) {
     const n = parseInt(s, 10);
@@ -87,10 +95,20 @@ function parseQty(raw) {
 
 function makeRecord(eye, sphere, cylinder, axis, qty, source) {
   if (sphere == null || Number.isNaN(sphere)) return null;
+  const cyl = cylinder || 0;
+  // 订单行常见省略球镜负号：4.25,-2.00,180 → 近视 -4.25
+  if (
+    (source === 'order' || source === 'order-line') &&
+    sphere > 0 &&
+    sphere <= 15 &&
+    cyl <= 0
+  ) {
+    sphere = -Math.abs(sphere);
+  }
   return {
     eye,
     sphere,
-    cylinder: cylinder || 0,
+    cylinder: cyl,
     axis: axis || 0,
     qty: qty ?? 1,
     source,
@@ -197,20 +215,27 @@ function parseOrderFormat(text) {
   const results = [];
   const seen = new Set();
   const pattern =
-    /(-?\d+\.?\d*)\s*[，,]\s*(-?\d+\.?\d*)\s*[，,]\s*(\d+)\s*(?:[(（]\s*(\d+)\s*盒\s*[)）]?)?/g;
+    /(-?\d+\.?\d*|\d+\.\d+)\s*-\s*(-?\d+\.?\d*)\s*[，,\s]\s*(\d+)|(-?\d+\.?\d*)\s*[，,]\s*(-?\d+\.?\d*)\s*[，,\s]\s*(\d+)\s*(?:[(（]\s*(\d+)\s*盒\s*[)）]?)?/g;
 
   let m;
   while ((m = pattern.exec(text)) !== null) {
-    const key = `${m[1]}-${m[2]}-${m[3]}-${m[4] || ''}`;
+    const isLoose = m[1] != null && m[1] !== '';
+    const s1 = isLoose ? m[1] : m[4];
+    const s2 = isLoose ? m[2] : m[5];
+    const s3 = isLoose ? m[3] : m[6];
+    const s4 = isLoose ? null : m[7];
+
+    const sphereRaw = isLoose ? `-${s1}` : s1;
+    const key = `${sphereRaw}-${s2}-${s3}-${s4 || ''}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
     const rec = makeRecord(
       '—',
-      parseSphere(m[1]),
-      parseCylinder(m[2]),
-      parseAxis(m[3]),
-      m[4] ? parseInt(m[4], 10) : null,
+      parseSphere(sphereRaw),
+      parseCylinder(s2),
+      parseAxis(s3),
+      s4 ? parseInt(s4, 10) : null,
       'order'
     );
     if (rec) results.push(rec);
@@ -232,6 +257,18 @@ function parseOrderLine(line) {
   const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : null;
   const withoutQty = cleaned.replace(/[（(][^）)]*[）)]/g, '');
 
+  const loose = cleaned.match(/^(\d+\.?\d*)\s*-\s*(-?\d+\.?\d*)\s*[,\s]\s*(\d+)/);
+  if (loose) {
+    return makeRecord(
+      '—',
+      parseSphere(`-${loose[1]}`),
+      parseCylinder(loose[2]),
+      parseAxis(loose[3]),
+      qty,
+      'order-line'
+    );
+  }
+
   const parts = withoutQty.split(/[,，\s]+/).filter(Boolean);
   if (parts.length < 3) return null;
 
@@ -241,7 +278,7 @@ function parseOrderLine(line) {
     parseCylinder(parts[1]),
     parseAxis(parts[2]),
     qty,
-    'order'
+    'order-line'
   );
 }
 
