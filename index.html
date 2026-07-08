@@ -3,86 +3,145 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>散光软镜度数换算工具</title>
+  <title>散光软镜工具</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>散光软镜度数换算工具</h1>
-      <p>粘贴客户验光数据，自动换算试戴片参数（顶点距离 12mm）</p>
+      <h1>散光软镜工具</h1>
+      <p id="headerDesc">粘贴客户验光数据，自动换算试戴片参数（顶点距离 12mm）</p>
     </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="convert" role="tab">度数换算</button>
+      <button class="tab-btn" data-tab="purchase" role="tab">批量采购</button>
+    </nav>
 
     <div class="deploy-hint" id="deployHint" hidden></div>
 
-    <section class="card">
-      <h2>① 输入数据</h2>
-      <textarea
-        id="textInput"
-        placeholder="支持多种格式，例如：&#10;&#10;【聊天格式】&#10;右眼(R) 近视525度(-5.25) 散光100度(-1.00) 轴位180°&#10;左眼(L) 近视450度(-4.50) 散光200度(-2.00) 轴位170°&#10;&#10;【验光单格式】&#10;OD: -5.75 / -1.25 x 10&#10;OS: -7.00 / -0.75 x 160&#10;R: -10.00 / -2.00 x 175&#10;L: -9.00 / -2.00 x 30&#10;&#10;【订单行】&#10;-3.50，100，179（1盒）&#10;-2.75, 125, 180"
-      ></textarea>
+    <div data-tab-panel="convert">
+      <section class="card">
+        <h2>① 输入数据</h2>
+        <textarea
+          id="textInput"
+          placeholder="支持多种格式，例如：&#10;&#10;【聊天格式】&#10;右眼(R) 近视525度(-5.25) 散光100度(-1.00) 轴位180°&#10;左眼(L) 近视450度(-4.50) 散光200度(-2.00) 轴位170°&#10;&#10;【验光单格式】&#10;OD: -5.75 / -1.25 x 10&#10;OS: -7.00 / -0.75 x 160&#10;R: -10.00 / -2.00 x 175&#10;L: -9.00 / -2.00 x 30&#10;&#10;【订单行】&#10;-3.50，100，179（1盒）&#10;-2.75, 125, 180"
+        ></textarea>
 
-      <p class="hint" id="parseHint"></p>
+        <p class="hint" id="parseHint"></p>
 
-      <div class="actions">
-        <button class="btn btn-secondary" id="btnParse">解析文本</button>
-        <button class="btn btn-secondary" id="btnClear">全部清除</button>
-      </div>
-    </section>
+        <div class="actions">
+          <button class="btn btn-secondary" id="btnParse">解析文本</button>
+          <button class="btn btn-secondary" id="btnClear">全部清除</button>
+        </div>
+      </section>
 
-    <section class="card">
-      <h2>② 校对数据（可修改）</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>眼别</th>
-              <th>球镜</th>
-              <th>柱镜</th>
-              <th>轴位</th>
-              <th>盒数</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="reviewBody">
-            <tr><td colspan="6" class="empty-state">请先粘贴验光数据并点击「解析文本」</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="actions">
-        <button class="btn btn-secondary" id="btnAddRow">+ 添加一行</button>
-        <button class="btn btn-primary" id="btnConvert">换算</button>
-      </div>
-    </section>
+      <section class="card">
+        <h2>② 校对数据（可修改）</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>眼别</th>
+                <th>球镜</th>
+                <th>柱镜</th>
+                <th>轴位</th>
+                <th>盒数</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="reviewBody">
+              <tr><td colspan="6" class="empty-state">请先粘贴验光数据并点击「解析文本」</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button class="btn btn-secondary" id="btnAddRow">+ 添加一行</button>
+          <button class="btn btn-primary" id="btnConvert">换算</button>
+        </div>
+      </section>
 
-    <section class="card">
-      <h2>③ 换算结果</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>眼别</th>
-              <th>原始</th>
-              <th class="arrow">→</th>
-              <th>换算后</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody id="resultBody">
-            <tr><td colspan="5" class="empty-state">校对后点击「换算」查看结果</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="actions">
-        <button class="btn btn-primary" id="btnCopy" disabled>复制结果</button>
-      </div>
-    </section>
+      <section class="card">
+        <h2>③ 换算结果</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>眼别</th>
+                <th>原始</th>
+                <th class="arrow">→</th>
+                <th>换算后</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody id="resultBody">
+              <tr><td colspan="5" class="empty-state">校对后点击「换算」查看结果</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="btnCopy" disabled>复制结果</button>
+        </div>
+      </section>
 
-    <footer>
-      换算算法与安视优散光验配计算器一致 · 仅供工作参考，不能替代专业验配
-    </footer>
+      <footer>
+        换算算法与安视优散光验配计算器一致 · 仅供工作参考，不能替代专业验配
+      </footer>
+    </div>
+
+    <div data-tab-panel="purchase" hidden>
+      <section class="card">
+        <h2>① 粘贴采购清单</h2>
+        <textarea
+          id="purchaseInput"
+          placeholder="每行一条，产品名与度数用 Tab 或空格分隔，例如：&#10;&#10;散光日抛	－3.25,75,180（2盒）&#10;散光日抛	-3.50,225,180（2盒）&#10;散光日抛	-6.50，125，180（2盒）&#10;舒日散光日抛	－6.50，175，180（3盒）&#10;散光双周	－6.50，175，170（1盒）"
+        ></textarea>
+        <p class="hint" id="purchaseHint"></p>
+        <div class="actions">
+          <button class="btn btn-secondary" id="btnPurchaseParse">解析清单</button>
+          <button class="btn btn-secondary" id="btnPurchaseClear">全部清除</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>② 校对（可修改）</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>产品</th>
+                <th>球镜</th>
+                <th>柱镜</th>
+                <th>轴位</th>
+                <th>盒数</th>
+                <th>状态</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="purchaseBody">
+              <tr><td colspan="7" class="empty-state">请先粘贴采购清单并点击「解析清单」</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="btnPurchaseExport" disabled>复制采购队列</button>
+        </div>
+      </section>
+
+      <section class="card purchase-guide">
+        <h2>③ 自动加购（油猴脚本）</h2>
+        <ol>
+          <li>安装 Tampermonkey，导入 <code>scripts/lensfit-cart.user.js</code></li>
+          <li>VPN 开启，浏览器登录 <a href="https://www.lensfit.jp/" target="_blank" rel="noopener">lensfit.jp</a></li>
+          <li>点击上方「复制采购队列」</li>
+          <li>在 lensfit 页面右下角面板 →「从剪贴板加载」→「开始加购」</li>
+        </ol>
+        <p class="hint">脚本只负责填表并加入购物车，结算请自行完成。</p>
+      </section>
+    </div>
   </div>
 
+  <script type="module" src="js/main.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

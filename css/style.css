@@ -36,6 +36,72 @@ header p {
   font-size: 0.9rem;
 }
 
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  justify-content: center;
+}
+
+.tab-btn {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  background: #eceff1;
+  color: #546e7a;
+  font-size: 0.95rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, color 0.2s;
+}
+
+.tab-btn:hover {
+  background: #cfd8dc;
+}
+
+.tab-btn.active {
+  background: #1976d2;
+  color: #fff;
+}
+
+.row-warn td {
+  background: #fff8e1;
+}
+
+.hint-warn {
+  color: #ef6c00;
+}
+
+.purchase-guide ol {
+  margin: 0 0 12px;
+  padding-left: 1.4rem;
+  font-size: 0.9rem;
+  color: #37474f;
+}
+
+.purchase-guide li {
+  margin-bottom: 6px;
+}
+
+.purchase-guide code {
+  background: #eceff1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.purchase-guide a {
+  color: #1976d2;
+}
+
+td select {
+  min-width: 120px;
+  padding: 6px 8px;
+  border: 1px solid #cfd8dc;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
 .card {
   background: #fff;
   border-radius: 12px;
