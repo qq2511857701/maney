@@ -282,3 +282,366 @@ td input:focus {
     width: 100%;
   }
 }
+
+/* ── 汇率面板 ── */
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes rateFlash {
+  0% {
+    background: rgba(25, 118, 210, 0.25);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes spinRefresh {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rate-panel {
+  margin-bottom: 20px;
+}
+
+.rate-panel-inner {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 45%, #fff8e1 100%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(25, 118, 210, 0.08);
+  animation: fadeSlideUp 0.4s ease;
+}
+
+.rate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.rate-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0d47a1;
+}
+
+.rate-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2e7d32;
+  box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.25);
+  animation: pulseDot 2s ease infinite;
+}
+
+.rate-refresh {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  color: #1565c0;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.3s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.rate-refresh:hover {
+  background: #fff;
+  transform: rotate(180deg);
+}
+
+.rate-refresh.is-spinning {
+  animation: spinRefresh 0.8s linear infinite;
+}
+
+.rate-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.rate-currency-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.rate-currency-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.rate-currency-bar {
+  height: 4px;
+}
+
+.rate-currency-card--usd .rate-currency-bar {
+  background: linear-gradient(90deg, #1565c0, #42a5f5);
+}
+
+.rate-currency-card--jpy .rate-currency-bar {
+  background: linear-gradient(90deg, #c62828, #ef5350);
+}
+
+.rate-currency-card--krw .rate-currency-bar {
+  background: linear-gradient(90deg, #2e7d32, #66bb6a);
+}
+
+.rate-currency-card--xau .rate-currency-bar {
+  background: linear-gradient(90deg, #f57f17, #ffd54f);
+}
+
+.rate-currency-card--xau .rate-core {
+  background: linear-gradient(135deg, rgba(255, 248, 225, 0.85), rgba(255, 255, 255, 0.65));
+}
+
+.rate-currency-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.rate-flag {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.rate-currency-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #37474f;
+}
+
+.rate-currency-name small {
+  font-weight: 500;
+  color: #90a4ae;
+  margin-left: 4px;
+}
+
+.rate-toggle {
+  border: none;
+  background: transparent;
+  color: #90a4ae;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 0.75rem;
+  transition: transform 0.25s ease;
+}
+
+.rate-currency-card.is-expanded .rate-toggle-icon {
+  transform: rotate(90deg);
+  display: inline-block;
+}
+
+.rate-core {
+  margin: 10px 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: 8px;
+}
+
+.rate-line {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #546e7a;
+  line-height: 1.6;
+}
+
+.rate-line--primary {
+  font-size: 0.88rem;
+  color: #1a2b3c;
+}
+
+.rate-line--primary .rate-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rate-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.rate-value.rate-flash {
+  border-radius: 4px;
+  animation: rateFlash 0.6s ease;
+}
+
+.rate-expand {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  padding: 0 12px;
+  transition: max-height 0.3s ease, opacity 0.25s ease, padding 0.3s ease;
+}
+
+.rate-currency-card.is-expanded .rate-expand {
+  max-height: 200px;
+  opacity: 1;
+  padding: 0 12px 12px;
+}
+
+.rate-expand-label {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  color: #90a4ae;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rate-footer {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.rate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #78909c;
+  margin-bottom: 10px;
+}
+
+.rate-meta-sep {
+  opacity: 0.5;
+}
+
+.rate-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff3e0;
+  color: #ef6c00;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.rate-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rate-pill-link {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  color: #1565c0;
+  font-size: 0.75rem;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s, transform 0.15s;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.rate-pill-link:hover {
+  background: #1976d2;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.rate-skeleton-card {
+  height: 160px;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.4) 25%,
+    rgba(255, 255, 255, 0.75) 50%,
+    rgba(255, 255, 255, 0.4) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease infinite;
+}
+
+.rate-error-msg {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: #c62828;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .rate-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .rate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rate-currency-card .rate-expand {
+    max-height: 200px;
+    opacity: 1;
+    padding: 0 12px 12px;
+  }
+
+  .rate-toggle {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rate-panel-inner,
+  .rate-live-dot,
+  .rate-skeleton-card,
+  .rate-refresh.is-spinning {
+    animation: none;
+  }
+
+  .rate-currency-card:hover {
+    transform: none;
+  }
+}
