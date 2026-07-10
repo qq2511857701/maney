@@ -1,11 +1,11 @@
 /**
- * 豆包 AI 水印去除 — 浏览器 Canvas 版
- * 仅对文字笔画做白色叠加反混合，不涂抹背景
+ * 豆包 AI 水印去除 — 反混合算法，仅去除水印叠加，不涂抹背景
  */
 
-const ALPHA_MAP_URL =
+const ALPHA_MAP_URL = new URL('../assets/doubao_alpha.png', import.meta.url).href;
+const ALPHA_MAP_CDN =
   'https://cdn.jsdelivr.net/gh/zhengsuanfa/doubao-watermark-remover@main/assets/doubao_alpha.png';
-const ALPHA_THRESHOLD = 0.92;
+const HALO_ALPHA = 0.78;
 const MARGIN_BOTTOM = 5;
 const MAX_DIMENSION = 4096;
 const WATERMARK_LUM = 255;
@@ -13,15 +13,15 @@ const WATERMARK_LUM = 255;
 let alphaMapCache = null;
 
 function detectWatermarkConfig(width, height) {
-  if (width > 1024 || height > 1024) {
-    const scale = Math.min(width, height) / 288;
-    return {
-      logoWidth: Math.floor(120 * scale * 1.2),
-      logoHeight: Math.floor(20 * scale * 1.5),
-      marginRight: Math.floor(10 * scale),
-    };
+  const scale = Math.min(width, height) / 288;
+  if (scale <= 1.05) {
+    return { logoWidth: 90, logoHeight: 18, marginRight: 8 };
   }
-  return { logoWidth: 90, logoHeight: 18, marginRight: 8 };
+  return {
+    logoWidth: Math.floor(120 * scale * 1.2),
+    logoHeight: Math.floor(20 * scale * 1.5),
+    marginRight: Math.floor(10 * scale),
+  };
 }
 
 function calculatePosition(width, height, logoWidth, logoHeight, marginRight) {
@@ -51,30 +51,36 @@ function scaleAlphaNearest(srcMap, srcW, srcH, dstW, dstH) {
   return dst;
 }
 
+async function fetchAlphaBlob() {
+  for (const url of [ALPHA_MAP_URL, ALPHA_MAP_CDN]) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return res.blob();
+    } catch {
+      /* try next */
+    }
+  }
+  throw new Error('alpha map unavailable');
+}
+
 async function loadAlphaMap(logoWidth, logoHeight) {
   const key = `${logoWidth}x${logoHeight}`;
   if (alphaMapCache?.key === key) return alphaMapCache.map;
 
-  try {
-    const res = await fetch(ALPHA_MAP_URL, { mode: 'cors' });
-    if (!res.ok) throw new Error('fetch failed');
-    const blob = await res.blob();
-    const bmp = await createImageBitmap(blob);
-    const srcW = bmp.width;
-    const srcH = bmp.height;
-    const canvas = document.createElement('canvas');
-    canvas.width = srcW;
-    canvas.height = srcH;
-    canvas.getContext('2d').drawImage(bmp, 0, 0);
-    bmp.close();
-    const { data } = canvas.getContext('2d').getImageData(0, 0, srcW, srcH);
-    const srcMap = readAlphaFromImageData(data, srcW, srcH);
-    const alphaMap = scaleAlphaNearest(srcMap, srcW, srcH, logoWidth, logoHeight);
-    alphaMapCache = { key, map: alphaMap };
-    return alphaMap;
-  } catch {
-    return new Float32Array(logoWidth * logoHeight);
-  }
+  const blob = await fetchAlphaBlob();
+  const bmp = await createImageBitmap(blob);
+  const srcW = bmp.width;
+  const srcH = bmp.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = srcW;
+  canvas.height = srcH;
+  canvas.getContext('2d').drawImage(bmp, 0, 0);
+  bmp.close();
+  const { data } = canvas.getContext('2d').getImageData(0, 0, srcW, srcH);
+  const srcMap = readAlphaFromImageData(data, srcW, srcH);
+  const alphaMap = scaleAlphaNearest(srcMap, srcW, srcH, logoWidth, logoHeight);
+  alphaMapCache = { key, map: alphaMap };
+  return alphaMap;
 }
 
 function scaleCanvasIfNeeded(sourceCanvas) {
@@ -92,14 +98,48 @@ function scaleCanvasIfNeeded(sourceCanvas) {
   return { canvas: scaled, scale };
 }
 
+function seededNoise(x, y) {
+  const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+  return Math.floor((n - Math.floor(n)) * 7) - 3;
+}
+
 function unblendWhite(r, g, b, alpha) {
-  const inv = 1 - alpha;
-  if (inv < 0.04) return [r, g, b];
+  const a = Math.min(0.96, Math.max(0.04, alpha));
+  const inv = 1 - a;
   return [
-    Math.max(0, Math.min(255, Math.round((r - alpha * WATERMARK_LUM) / inv))),
-    Math.max(0, Math.min(255, Math.round((g - alpha * WATERMARK_LUM) / inv))),
-    Math.max(0, Math.min(255, Math.round((b - alpha * WATERMARK_LUM) / inv))),
+    Math.max(0, Math.min(255, Math.round((r - a * WATERMARK_LUM) / inv))),
+    Math.max(0, Math.min(255, Math.round((g - a * WATERMARK_LUM) / inv))),
+    Math.max(0, Math.min(255, Math.round((b - a * WATERMARK_LUM) / inv))),
   ];
+}
+
+function restorePixel(r, g, b, mapAlpha, refR, refG, refB, x, y) {
+  if (mapAlpha >= 0.92) {
+    const n = seededNoise(x, y);
+    return [
+      Math.max(0, Math.min(255, refR + n)),
+      Math.max(0, Math.min(255, refG + n)),
+      Math.max(0, Math.min(255, refB + n)),
+    ];
+  }
+  return unblendWhite(r, g, b, mapAlpha);
+}
+
+function observedOverlayAlpha(r, g, b, refR, refG, refB) {
+  const channels = [0, 1, 2].map((c) => {
+    const ch = [r, g, b][c];
+    const ref = [refR, refG, refB][c];
+    const denom = WATERMARK_LUM - ref;
+    if (denom < 12) return 0;
+    return (ch - ref) / denom;
+  });
+  return Math.max(0, Math.min(1, Math.max(...channels)));
+}
+
+function sampleRefAbove(pixels, width, x, y, startY) {
+  const sy = Math.max(0, Math.min(startY - 4, y - 12));
+  const i = (sy * width + x) * 4;
+  return [pixels[i], pixels[i + 1], pixels[i + 2]];
 }
 
 /**
@@ -118,6 +158,7 @@ export async function removeDoubaoWatermark(sourceCanvas) {
   const { logoWidth, logoHeight, marginRight } = detectWatermarkConfig(width, height);
   const { startX, startY } = calculatePosition(width, height, logoWidth, logoHeight, marginRight);
   const alphaMap = await loadAlphaMap(logoWidth, logoHeight);
+  const edgeColStart = Math.floor(logoWidth * 0.55);
 
   let imageData;
   try {
@@ -132,14 +173,28 @@ export async function removeDoubaoWatermark(sourceCanvas) {
     if (y < 0 || y >= height) continue;
     const rowOffset = row * logoWidth;
     for (let col = 0; col < logoWidth; col++) {
-      const alpha = alphaMap[rowOffset + col];
-      if (alpha < ALPHA_THRESHOLD) continue;
+      const mapAlpha = alphaMap[rowOffset + col];
+      if (mapAlpha < 0.12) continue;
 
       const x = startX + col;
       if (x < 0 || x >= width) continue;
 
       const i = (y * width + x) * 4;
-      const [nr, ng, nb] = unblendWhite(pixels[i], pixels[i + 1], pixels[i + 2], alpha);
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      const [refR, refG, refB] = sampleRefAbove(pixels, width, x, y, startY);
+
+      let useAlpha = 0;
+      if (mapAlpha >= HALO_ALPHA) {
+        useAlpha = mapAlpha;
+      } else if (col >= edgeColStart) {
+        const observed = observedOverlayAlpha(r, g, b, refR, refG, refB);
+        if (observed >= 0.18) useAlpha = observed;
+      }
+      if (useAlpha < 0.12) continue;
+
+      const [nr, ng, nb] = restorePixel(r, g, b, useAlpha, refR, refG, refB, x, y);
       pixels[i] = nr;
       pixels[i + 1] = ng;
       pixels[i + 2] = nb;
