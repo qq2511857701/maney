@@ -7,8 +7,9 @@ const ALPHA_MAP_URL =
   'https://cdn.jsdelivr.net/gh/zhengsuanfa/doubao-watermark-remover@main/assets/doubao_alpha.png';
 const ALPHA_THRESHOLD = 0.15;
 const MARGIN_BOTTOM = 5;
+const MAX_DIMENSION = 4096;
 
-let alphaImageCache = null;
+let alphaMapCache = null;
 
 function detectWatermarkConfig(width, height) {
   if (width > 1024 || height > 1024) {
@@ -29,36 +30,54 @@ function calculatePosition(width, height, logoWidth, logoHeight, marginRight) {
   };
 }
 
-async function loadAlphaImage() {
-  if (alphaImageCache) return alphaImageCache;
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      alphaImageCache = img;
-      resolve(img);
-    };
-    img.onerror = () => reject(new Error('无法加载 Alpha 贴图'));
-    img.src = ALPHA_MAP_URL;
-  });
+async function loadAlphaMap(logoWidth, logoHeight) {
+  const key = `${logoWidth}x${logoHeight}`;
+  if (alphaMapCache?.key === key) return alphaMapCache.map;
+
+  try {
+    const res = await fetch(ALPHA_MAP_URL, { mode: 'cors' });
+    if (!res.ok) throw new Error('fetch failed');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const bmp = await createImageBitmap(blob, {
+        resizeWidth: logoWidth,
+        resizeHeight: logoHeight,
+        resizeQuality: 'high',
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = logoWidth;
+      canvas.height = logoHeight;
+      canvas.getContext('2d').drawImage(bmp, 0, 0);
+      bmp.close();
+      const { data } = canvas.getContext('2d').getImageData(0, 0, logoWidth, logoHeight);
+      const alphaMap = new Float32Array(logoWidth * logoHeight);
+      for (let i = 0; i < logoWidth * logoHeight; i++) {
+        alphaMap[i] = Math.max(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]) / 255;
+      }
+      alphaMapCache = { key, map: alphaMap };
+      return alphaMap;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch {
+    return defaultAlphaMap(logoWidth, logoHeight);
+  }
 }
 
-function buildAlphaMap(alphaImg, logoWidth, logoHeight) {
-  const canvas = document.createElement('canvas');
-  canvas.width = logoWidth;
-  canvas.height = logoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(alphaImg, 0, 0, logoWidth, logoHeight);
-  const { data } = ctx.getImageData(0, 0, logoWidth, logoHeight);
+function scaleCanvasIfNeeded(sourceCanvas) {
+  const { width, height } = sourceCanvas;
+  const maxSide = Math.max(width, height);
+  if (maxSide <= MAX_DIMENSION) return { canvas: sourceCanvas, scale: 1 };
 
-  const alphaMap = new Float32Array(logoWidth * logoHeight);
-  for (let i = 0; i < logoWidth * logoHeight; i++) {
-    const r = data[i * 4];
-    const g = data[i * 4 + 1];
-    const b = data[i * 4 + 2];
-    alphaMap[i] = Math.max(r, g, b) / 255;
-  }
-  return alphaMap;
+  const scale = MAX_DIMENSION / maxSide;
+  const w = Math.round(width * scale);
+  const h = Math.round(height * scale);
+  const scaled = document.createElement('canvas');
+  scaled.width = w;
+  scaled.height = h;
+  scaled.getContext('2d').drawImage(sourceCanvas, 0, 0, w, h);
+  return { canvas: scaled, scale };
 }
 
 function defaultAlphaMap(logoWidth, logoHeight) {
@@ -82,26 +101,26 @@ function seededNoise(x, y) {
  * 去除豆包水印，返回处理后的 canvas
  */
 export async function removeDoubaoWatermark(sourceCanvas) {
-  const width = sourceCanvas.width;
-  const height = sourceCanvas.height;
+  const { canvas: workCanvas } = scaleCanvasIfNeeded(sourceCanvas);
+  const width = workCanvas.width;
+  const height = workCanvas.height;
   const out = document.createElement('canvas');
   out.width = width;
   out.height = height;
-  const ctx = out.getContext('2d');
-  ctx.drawImage(sourceCanvas, 0, 0);
+  const ctx = out.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(workCanvas, 0, 0);
 
   const { logoWidth, logoHeight, marginRight } = detectWatermarkConfig(width, height);
   const { startX, startY } = calculatePosition(width, height, logoWidth, logoHeight, marginRight);
 
-  let alphaMap;
-  try {
-    const alphaImg = await loadAlphaImage();
-    alphaMap = buildAlphaMap(alphaImg, logoWidth, logoHeight);
-  } catch {
-    alphaMap = defaultAlphaMap(logoWidth, logoHeight);
-  }
+  const alphaMap = await loadAlphaMap(logoWidth, logoHeight);
 
-  const imageData = ctx.getImageData(0, 0, width, height);
+  let imageData;
+  try {
+    imageData = ctx.getImageData(0, 0, width, height);
+  } catch {
+    throw new Error('图片过大或浏览器不支持，请缩小后重试');
+  }
   const pixels = imageData.data;
 
   const getPixel = (x, y) => {
@@ -182,7 +201,18 @@ export function fileToCanvas(file) {
 }
 
 export function canvasToBlob(canvas, type = 'image/jpeg', quality = 0.92) {
-  return new Promise((resolve) => {
-    canvas.toBlob(resolve, type, quality);
+  return new Promise((resolve, reject) => {
+    try {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('导出失败'));
+        },
+        type,
+        quality
+      );
+    } catch (e) {
+      reject(e);
+    }
   });
 }

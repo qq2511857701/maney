@@ -11,13 +11,15 @@ const fileInput = $('wmFileInput');
 const hint = $('wmHint');
 const previewWrap = $('wmPreviewWrap');
 const originalCanvas = $('wmOriginal');
-const resultCanvas = $('wmResult');
+const resultImg = $('wmResult');
+const resultPlaceholder = $('wmResultPlaceholder');
 const btnProcess = $('wmProcess');
 const btnDownload = $('wmDownload');
 const btnClear = $('wmClear');
 
 let currentFile = null;
 let resultBlob = null;
+let resultObjectUrl = null;
 
 function setHint(text, type = '') {
   hint.textContent = text;
@@ -25,25 +27,33 @@ function setHint(text, type = '') {
 }
 
 function resizeCanvasToDisplay(canvas, maxW = 420) {
+  if (!canvas.width || !canvas.height) return;
   const ratio = Math.min(1, maxW / canvas.width);
   canvas.style.width = `${Math.round(canvas.width * ratio)}px`;
   canvas.style.height = `${Math.round(canvas.height * ratio)}px`;
 }
 
+function clearResultPreview() {
+  if (resultObjectUrl) {
+    URL.revokeObjectURL(resultObjectUrl);
+    resultObjectUrl = null;
+  }
+  resultBlob = null;
+  resultImg.removeAttribute('src');
+  resultImg.hidden = true;
+  resultPlaceholder.hidden = false;
+  btnDownload.disabled = true;
+}
+
 async function loadPreview(file) {
   currentFile = file;
-  resultBlob = null;
-  btnDownload.disabled = true;
+  clearResultPreview();
 
   const canvas = await fileToCanvas(file);
   originalCanvas.width = canvas.width;
   originalCanvas.height = canvas.height;
   originalCanvas.getContext('2d').drawImage(canvas, 0, 0);
   resizeCanvasToDisplay(originalCanvas);
-
-  resultCanvas.width = canvas.width;
-  resultCanvas.height = canvas.height;
-  resultCanvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
 
   previewWrap.hidden = false;
   btnProcess.disabled = false;
@@ -59,17 +69,32 @@ async function handleProcess() {
   try {
     const src = await fileToCanvas(currentFile);
     const out = await removeDoubaoWatermark(src);
-    resultCanvas.width = out.width;
-    resultCanvas.height = out.height;
-    resultCanvas.getContext('2d').drawImage(out, 0, 0);
-    resizeCanvasToDisplay(resultCanvas);
 
     const ext = currentFile.name.split('.').pop()?.toLowerCase();
     const type = ext === 'png' ? 'image/png' : 'image/jpeg';
-    resultBlob = await canvasToBlob(out, type, 0.92);
+    const blob = await canvasToBlob(out, type, 0.92);
+
+    if (!blob) {
+      throw new Error('图片导出失败，请尝试换一张较小的图片');
+    }
+
+    resultBlob = blob;
+    if (resultObjectUrl) URL.revokeObjectURL(resultObjectUrl);
+    resultObjectUrl = URL.createObjectURL(blob);
+
+    resultImg.onload = () => {
+      resultImg.hidden = false;
+      resultPlaceholder.hidden = true;
+    };
+    resultImg.onerror = () => {
+      throw new Error('预览加载失败');
+    };
+    resultImg.src = resultObjectUrl;
+
     btnDownload.disabled = false;
     setHint('处理完成，可下载或对比左右效果', 'ok');
   } catch (e) {
+    clearResultPreview();
     setHint(`处理失败：${e.message}`, 'error');
   } finally {
     btnProcess.disabled = false;
@@ -90,11 +115,10 @@ function handleDownload() {
 
 function handleClear() {
   currentFile = null;
-  resultBlob = null;
   fileInput.value = '';
   previewWrap.hidden = true;
   btnProcess.disabled = true;
-  btnDownload.disabled = true;
+  clearResultPreview();
   setHint('');
 }
 
