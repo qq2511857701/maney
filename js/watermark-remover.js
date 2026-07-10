@@ -5,8 +5,10 @@
 
 const ALPHA_MAP_URL =
   'https://cdn.jsdelivr.net/gh/zhengsuanfa/doubao-watermark-remover@main/assets/doubao_alpha.png';
-const ALPHA_THRESHOLD = 0.05;
-const MARGIN_BOTTOM = 3;
+const ALPHA_THRESHOLD = 0.85;
+const EDGE_ALPHA_THRESHOLD = 0.42;
+const EDGE_COL_RATIO = 0.72;
+const MARGIN_BOTTOM = 5;
 const MAX_DIMENSION = 4096;
 
 let alphaMapCache = null;
@@ -15,12 +17,12 @@ function detectWatermarkConfig(width, height) {
   if (width > 1024 || height > 1024) {
     const scale = Math.min(width, height) / 288;
     return {
-      logoWidth: Math.floor(120 * scale * 1.4),
-      logoHeight: Math.floor(20 * scale * 1.6),
-      marginRight: Math.max(2, Math.floor(5 * scale)),
+      logoWidth: Math.floor(120 * scale * 1.2),
+      logoHeight: Math.floor(20 * scale * 1.5),
+      marginRight: Math.floor(10 * scale),
     };
   }
-  return { logoWidth: 100, logoHeight: 22, marginRight: 4 };
+  return { logoWidth: 90, logoHeight: 18, marginRight: 8 };
 }
 
 function calculatePosition(width, height, logoWidth, logoHeight, marginRight) {
@@ -82,7 +84,12 @@ function scaleCanvasIfNeeded(sourceCanvas) {
 
 function defaultAlphaMap(logoWidth, logoHeight) {
   const map = new Float32Array(logoWidth * logoHeight);
-  map.fill(0.25);
+  // 仅右下角文字区域，避免 CDN 失败时误删整带内容
+  for (let row = Math.floor(logoHeight * 0.45); row < logoHeight; row++) {
+    for (let col = Math.floor(logoWidth * 0.5); col < logoWidth; col++) {
+      map[row * logoWidth + col] = 0.25;
+    }
+  }
   return map;
 }
 
@@ -107,41 +114,21 @@ function fillWithBg(setPixel, x, y, bg, noise) {
   );
 }
 
-/** 右下角边缘残留：半透明白字比背景更亮 */
-function isLikelyWatermarkPixel(r, g, b, bgR, bgG, bgB) {
-  const bgAvg = (bgR + bgG + bgB) / 3;
-  const avg = (r + g + b) / 3;
-  const maxDiff = Math.max(Math.abs(r - bgR), Math.abs(g - bgG), Math.abs(b - bgB));
-  return avg > bgAvg + 6 && maxDiff > 10 && r > 160 && g > 160 && b > 155;
-}
-
-function cleanupEdgeResidual({
-  width,
-  height,
-  startX,
-  startY,
+function replaceIfAlpha({
+  row,
+  col,
+  x,
+  y,
+  threshold,
+  alphaMap,
   logoWidth,
-  logoHeight,
-  getPixel,
-  setPixel,
   bgColorMap,
   leftBg,
+  setPixel,
 }) {
-  const padBottom = 6;
-  const x0 = Math.max(0, startX);
-  const x1 = width - 1;
-  const y0 = Math.max(0, startY);
-  const y1 = Math.min(height - 1, startY + logoHeight + padBottom);
-
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const col = Math.min(logoWidth - 1, Math.max(0, x - startX));
-      const bg = bgColorMap[col] || leftBg;
-      const [r, g, b] = getPixel(x, y);
-      if (isLikelyWatermarkPixel(r, g, b, bg[0], bg[1], bg[2])) {
-        fillWithBg(setPixel, x, y, bg, seededNoise(x, y));
-      }
-    }
+  const alpha = alphaMap[row * logoWidth + col];
+  if (alpha > threshold) {
+    fillWithBg(setPixel, x, y, bgColorMap[col] || leftBg, seededNoise(x, y));
   }
 }
 
@@ -204,30 +191,46 @@ export async function removeDoubaoWatermark(sourceCanvas) {
   for (let row = 0; row < logoHeight; row++) {
     const y = startY + row;
     if (y < 0 || y >= height) continue;
-    const alphaRowOffset = row * logoWidth;
     for (let col = 0; col < logoWidth; col++) {
       const x = startX + col;
       if (x < 0 || x >= width) continue;
-
-      const alpha = alphaMap[alphaRowOffset + col];
-      if (alpha > ALPHA_THRESHOLD) {
-        fillWithBg(setPixel, x, y, bgColorMap[col] || leftBg, seededNoise(x, y));
-      }
+      replaceIfAlpha({
+        row,
+        col,
+        x,
+        y,
+        threshold: ALPHA_THRESHOLD,
+        alphaMap,
+        logoWidth,
+        bgColorMap,
+        leftBg,
+        setPixel,
+      });
     }
   }
 
-  cleanupEdgeResidual({
-    width,
-    height,
-    startX,
-    startY,
-    logoWidth,
-    logoHeight,
-    getPixel,
-    setPixel,
-    bgColorMap,
-    leftBg,
-  });
+  // 仅对 alpha 贴图最右侧文字边缘做低阈值补扫，不误伤倒影等内容
+  const edgeColStart = Math.floor(logoWidth * EDGE_COL_RATIO);
+  for (let row = 0; row < logoHeight; row++) {
+    const y = startY + row;
+    if (y < 0 || y >= height) continue;
+    for (let col = edgeColStart; col < logoWidth; col++) {
+      const x = startX + col;
+      if (x < 0 || x >= width) continue;
+      replaceIfAlpha({
+        row,
+        col,
+        x,
+        y,
+        threshold: EDGE_ALPHA_THRESHOLD,
+        alphaMap,
+        logoWidth,
+        bgColorMap,
+        leftBg,
+        setPixel,
+      });
+    }
+  }
 
   ctx.putImageData(imageData, 0, 0);
   return out;
