@@ -67,9 +67,7 @@ async function handleProcess(srcCanvas) {
     const src = srcCanvas || (await fileToCanvas(currentFile));
     const out = await removeDoubaoWatermark(src);
 
-    const ext = currentFile.name.split('.').pop()?.toLowerCase();
-    const type = ext === 'png' ? 'image/png' : 'image/jpeg';
-    const blob = await canvasToBlob(out, type, 0.92);
+    const blob = await canvasToBlob(out, 'image/png');
 
     if (!blob) {
       throw new Error('图片导出失败，请尝试换一张较小的图片');
@@ -99,7 +97,7 @@ async function handleProcess(srcCanvas) {
 function handleDownload() {
   if (!resultBlob || !currentFile) return;
   const base = currentFile.name.replace(/\.[^.]+$/, '');
-  const ext = resultBlob.type === 'image/png' ? 'png' : 'jpg';
+  const ext = 'png';
   const a = document.createElement('a');
   a.href = URL.createObjectURL(resultBlob);
   a.download = `${base}_no_watermark.${ext}`;

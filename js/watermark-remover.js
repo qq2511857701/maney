@@ -1,31 +1,27 @@
 /**
- * 豆包「豆包AI生成」水印去除 — 精简版
+ * 豆包「豆包AI生成」水印去除
  *
- * 思路（与开源 doubao-watermark-remover 一致）：
- * 1. 定位右下角水印区域
- * 2. 仅处理 alpha 贴图中「文字笔画」位置（高 alpha + 区域在右侧）
- * 3. 用该列上方背景色替换，不整块打码
+ * 水印实际约占 120×20 @288px 参考尺寸，紧贴右下角。
+ * 不再使用 1.2× 放大检测框（会把倒影区包进去）。
  */
 
 const ALPHA_MAP_URL = new URL('../assets/doubao_alpha.png', import.meta.url).href;
 const ALPHA_MAP_CDN =
   'https://cdn.jsdelivr.net/gh/zhengsuanfa/doubao-watermark-remover@main/assets/doubao_alpha.png';
-const ALPHA_THRESHOLD = 0.82;
-const TEXT_COL_RATIO = 0.38;
+const ALPHA_THRESHOLD = 0.15;
 const MARGIN_BOTTOM = 5;
 const MAX_DIMENSION = 4096;
+const WHITE = 255;
 
 let alphaMapCache = null;
 
+/** 精确水印区域（与豆包输出一致，不额外放大） */
 function detectWatermarkConfig(width, height) {
   const scale = Math.min(width, height) / 288;
-  if (scale <= 1.05) {
-    return { logoWidth: 90, logoHeight: 18, marginRight: 8 };
-  }
   return {
-    logoWidth: Math.floor(120 * scale * 1.2),
-    logoHeight: Math.floor(20 * scale * 1.5),
-    marginRight: Math.floor(10 * scale),
+    logoWidth: Math.max(90, Math.round(120 * scale)),
+    logoHeight: Math.max(16, Math.round(20 * scale)),
+    marginRight: Math.max(6, Math.round(8 * scale)),
   };
 }
 
@@ -103,6 +99,28 @@ function seededNoise(x, y) {
   return Math.floor((n - Math.floor(n)) * 5) - 2;
 }
 
+function unblend(r, g, b, alpha) {
+  const a = Math.min(0.97, Math.max(0.05, alpha));
+  const inv = 1 - a;
+  return [
+    Math.max(0, Math.min(255, Math.round((r - a * WHITE) / inv))),
+    Math.max(0, Math.min(255, Math.round((g - a * WHITE) / inv))),
+    Math.max(0, Math.min(255, Math.round((b - a * WHITE) / inv))),
+  ];
+}
+
+function overlayAlpha(r, g, b, refR, refG, refB) {
+  return Math.max(
+    0,
+    ...[0, 1, 2].map((c) => {
+      const ch = [r, g, b][c];
+      const ref = [refR, refG, refB][c];
+      const denom = WHITE - ref;
+      return denom < 8 ? 0 : (ch - ref) / denom;
+    })
+  );
+}
+
 export async function removeDoubaoWatermark(sourceCanvas) {
   const workCanvas = scaleCanvasIfNeeded(sourceCanvas);
   const width = workCanvas.width;
@@ -117,7 +135,6 @@ export async function removeDoubaoWatermark(sourceCanvas) {
   const { logoWidth, logoHeight, marginRight } = detectWatermarkConfig(width, height);
   const { startX, startY } = calculatePosition(width, height, logoWidth, logoHeight, marginRight);
   const alphaMap = await loadAlphaMap(logoWidth, logoHeight);
-  const textColStart = Math.floor(logoWidth * TEXT_COL_RATIO);
 
   let imageData;
   try {
@@ -142,7 +159,7 @@ export async function removeDoubaoWatermark(sourceCanvas) {
   const bgByCol = new Array(logoWidth);
   for (let col = 0; col < logoWidth; col++) {
     const samples = [];
-    for (let sy = Math.max(0, startY - 50); sy < startY; sy++) {
+    for (let sy = Math.max(0, startY - 40); sy < startY; sy++) {
       const sx = startX + col;
       if (sx >= 0 && sx < width) samples.push(getPixel(sx, sy));
     }
@@ -153,22 +170,29 @@ export async function removeDoubaoWatermark(sourceCanvas) {
     const y = startY + row;
     if (y < 0 || y >= height) continue;
 
-    for (let col = textColStart; col < logoWidth; col++) {
-      const alpha = alphaMap[row * logoWidth + col];
-      if (alpha < ALPHA_THRESHOLD) continue;
+    for (let col = 0; col < logoWidth; col++) {
+      const mapAlpha = alphaMap[row * logoWidth + col];
+      if (mapAlpha < ALPHA_THRESHOLD) continue;
 
       const x = startX + col;
       if (x < 0 || x >= width) continue;
 
+      const [r, g, b] = getPixel(x, y);
       const [bgR, bgG, bgB] = bgByCol[col];
-      const n = seededNoise(x, y);
-      setPixel(
-        x,
-        y,
-        Math.max(0, Math.min(255, bgR + n)),
-        Math.max(0, Math.min(255, bgG + n)),
-        Math.max(0, Math.min(255, bgB + n))
-      );
+      const observed = overlayAlpha(r, g, b, bgR, bgG, bgB);
+
+      let nr;
+      let ng;
+      let nb;
+      if (observed >= 0.1) {
+        [nr, ng, nb] = unblend(r, g, b, Math.max(observed, mapAlpha));
+      } else {
+        const n = seededNoise(x, y);
+        nr = Math.max(0, Math.min(255, bgR + n));
+        ng = Math.max(0, Math.min(255, bgG + n));
+        nb = Math.max(0, Math.min(255, bgB + n));
+      }
+      setPixel(x, y, nr, ng, nb);
     }
   }
 
@@ -196,7 +220,7 @@ export function fileToCanvas(file) {
   });
 }
 
-export function canvasToBlob(canvas, type = 'image/jpeg', quality = 0.92) {
+export function canvasToBlob(canvas, type = 'image/png', quality = 0.92) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('导出失败'))),
