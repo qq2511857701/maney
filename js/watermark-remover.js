@@ -1,15 +1,14 @@
 /**
  * 豆包 AI 水印去除 — 浏览器 Canvas 版
- * 算法移植自 https://github.com/zhengsuanfa/doubao-watermark-remover
+ * 仅对文字笔画做白色叠加反混合，不涂抹背景
  */
 
 const ALPHA_MAP_URL =
   'https://cdn.jsdelivr.net/gh/zhengsuanfa/doubao-watermark-remover@main/assets/doubao_alpha.png';
-const ALPHA_THRESHOLD = 0.85;
-const EDGE_ALPHA_THRESHOLD = 0.42;
-const EDGE_COL_RATIO = 0.72;
+const ALPHA_THRESHOLD = 0.92;
 const MARGIN_BOTTOM = 5;
 const MAX_DIMENSION = 4096;
+const WATERMARK_LUM = 255;
 
 let alphaMapCache = null;
 
@@ -32,6 +31,26 @@ function calculatePosition(width, height, logoWidth, logoHeight, marginRight) {
   };
 }
 
+function readAlphaFromImageData(data, width, height) {
+  const map = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    map[i] = Math.max(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]) / 255;
+  }
+  return map;
+}
+
+function scaleAlphaNearest(srcMap, srcW, srcH, dstW, dstH) {
+  const dst = new Float32Array(dstW * dstH);
+  for (let row = 0; row < dstH; row++) {
+    const srcRow = Math.min(srcH - 1, Math.floor((row * srcH) / dstH));
+    for (let col = 0; col < dstW; col++) {
+      const srcCol = Math.min(srcW - 1, Math.floor((col * srcW) / dstW));
+      dst[row * dstW + col] = srcMap[srcRow * srcW + srcCol];
+    }
+  }
+  return dst;
+}
+
 async function loadAlphaMap(logoWidth, logoHeight) {
   const key = `${logoWidth}x${logoHeight}`;
   if (alphaMapCache?.key === key) return alphaMapCache.map;
@@ -40,30 +59,21 @@ async function loadAlphaMap(logoWidth, logoHeight) {
     const res = await fetch(ALPHA_MAP_URL, { mode: 'cors' });
     if (!res.ok) throw new Error('fetch failed');
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    try {
-      const bmp = await createImageBitmap(blob, {
-        resizeWidth: logoWidth,
-        resizeHeight: logoHeight,
-        resizeQuality: 'high',
-      });
-      const canvas = document.createElement('canvas');
-      canvas.width = logoWidth;
-      canvas.height = logoHeight;
-      canvas.getContext('2d').drawImage(bmp, 0, 0);
-      bmp.close();
-      const { data } = canvas.getContext('2d').getImageData(0, 0, logoWidth, logoHeight);
-      const alphaMap = new Float32Array(logoWidth * logoHeight);
-      for (let i = 0; i < logoWidth * logoHeight; i++) {
-        alphaMap[i] = Math.max(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]) / 255;
-      }
-      alphaMapCache = { key, map: alphaMap };
-      return alphaMap;
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    const bmp = await createImageBitmap(blob);
+    const srcW = bmp.width;
+    const srcH = bmp.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = srcW;
+    canvas.height = srcH;
+    canvas.getContext('2d').drawImage(bmp, 0, 0);
+    bmp.close();
+    const { data } = canvas.getContext('2d').getImageData(0, 0, srcW, srcH);
+    const srcMap = readAlphaFromImageData(data, srcW, srcH);
+    const alphaMap = scaleAlphaNearest(srcMap, srcW, srcH, logoWidth, logoHeight);
+    alphaMapCache = { key, map: alphaMap };
+    return alphaMap;
   } catch {
-    return defaultAlphaMap(logoWidth, logoHeight);
+    return new Float32Array(logoWidth * logoHeight);
   }
 }
 
@@ -82,54 +92,14 @@ function scaleCanvasIfNeeded(sourceCanvas) {
   return { canvas: scaled, scale };
 }
 
-function defaultAlphaMap(logoWidth, logoHeight) {
-  const map = new Float32Array(logoWidth * logoHeight);
-  // 仅右下角文字区域，避免 CDN 失败时误删整带内容
-  for (let row = Math.floor(logoHeight * 0.45); row < logoHeight; row++) {
-    for (let col = Math.floor(logoWidth * 0.5); col < logoWidth; col++) {
-      map[row * logoWidth + col] = 0.25;
-    }
-  }
-  return map;
-}
-
-function medianColor(samples) {
-  if (!samples.length) return [100, 100, 100];
-  const sorted = [...samples].sort((a, b) => a[0] + a[1] + a[2] - (b[0] + b[1] + b[2]));
-  return sorted[Math.floor(sorted.length / 2)];
-}
-
-function seededNoise(x, y) {
-  const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
-  return Math.floor((n - Math.floor(n)) * 7) - 3;
-}
-
-function fillWithBg(setPixel, x, y, bg, noise) {
-  setPixel(
-    x,
-    y,
-    Math.max(0, Math.min(255, bg[0] + noise)),
-    Math.max(0, Math.min(255, bg[1] + noise)),
-    Math.max(0, Math.min(255, bg[2] + noise))
-  );
-}
-
-function replaceIfAlpha({
-  row,
-  col,
-  x,
-  y,
-  threshold,
-  alphaMap,
-  logoWidth,
-  bgColorMap,
-  leftBg,
-  setPixel,
-}) {
-  const alpha = alphaMap[row * logoWidth + col];
-  if (alpha > threshold) {
-    fillWithBg(setPixel, x, y, bgColorMap[col] || leftBg, seededNoise(x, y));
-  }
+function unblendWhite(r, g, b, alpha) {
+  const inv = 1 - alpha;
+  if (inv < 0.04) return [r, g, b];
+  return [
+    Math.max(0, Math.min(255, Math.round((r - alpha * WATERMARK_LUM) / inv))),
+    Math.max(0, Math.min(255, Math.round((g - alpha * WATERMARK_LUM) / inv))),
+    Math.max(0, Math.min(255, Math.round((b - alpha * WATERMARK_LUM) / inv))),
+  ];
 }
 
 /**
@@ -147,7 +117,6 @@ export async function removeDoubaoWatermark(sourceCanvas) {
 
   const { logoWidth, logoHeight, marginRight } = detectWatermarkConfig(width, height);
   const { startX, startY } = calculatePosition(width, height, logoWidth, logoHeight, marginRight);
-
   const alphaMap = await loadAlphaMap(logoWidth, logoHeight);
 
   let imageData;
@@ -158,77 +127,22 @@ export async function removeDoubaoWatermark(sourceCanvas) {
   }
   const pixels = imageData.data;
 
-  const getPixel = (x, y) => {
-    const i = (y * width + x) * 4;
-    return [pixels[i], pixels[i + 1], pixels[i + 2]];
-  };
-
-  const setPixel = (x, y, r, g, b) => {
-    const i = (y * width + x) * 4;
-    pixels[i] = r;
-    pixels[i + 1] = g;
-    pixels[i + 2] = b;
-  };
-
-  const bgColorMap = {};
-  for (let col = 0; col < logoWidth; col++) {
-    const samples = [];
-    for (let sy = Math.max(0, startY - 60); sy < startY; sy++) {
-      const sx = startX + col;
-      if (sx >= 0 && sx < width) samples.push(getPixel(sx, sy));
-    }
-    bgColorMap[col] = medianColor(samples);
-  }
-
-  const leftSamples = [];
-  for (let sx = Math.max(0, startX - 30); sx < startX; sx++) {
-    for (let sy = startY; sy < Math.min(height, startY + logoHeight); sy++) {
-      leftSamples.push(getPixel(sx, sy));
-    }
-  }
-  const leftBg = medianColor(leftSamples);
-
   for (let row = 0; row < logoHeight; row++) {
     const y = startY + row;
     if (y < 0 || y >= height) continue;
+    const rowOffset = row * logoWidth;
     for (let col = 0; col < logoWidth; col++) {
-      const x = startX + col;
-      if (x < 0 || x >= width) continue;
-      replaceIfAlpha({
-        row,
-        col,
-        x,
-        y,
-        threshold: ALPHA_THRESHOLD,
-        alphaMap,
-        logoWidth,
-        bgColorMap,
-        leftBg,
-        setPixel,
-      });
-    }
-  }
+      const alpha = alphaMap[rowOffset + col];
+      if (alpha < ALPHA_THRESHOLD) continue;
 
-  // 仅对 alpha 贴图最右侧文字边缘做低阈值补扫，不误伤倒影等内容
-  const edgeColStart = Math.floor(logoWidth * EDGE_COL_RATIO);
-  for (let row = 0; row < logoHeight; row++) {
-    const y = startY + row;
-    if (y < 0 || y >= height) continue;
-    for (let col = edgeColStart; col < logoWidth; col++) {
       const x = startX + col;
       if (x < 0 || x >= width) continue;
-      replaceIfAlpha({
-        row,
-        col,
-        x,
-        y,
-        threshold: EDGE_ALPHA_THRESHOLD,
-        alphaMap,
-        logoWidth,
-        bgColorMap,
-        leftBg,
-        setPixel,
-      });
+
+      const i = (y * width + x) * 4;
+      const [nr, ng, nb] = unblendWhite(pixels[i], pixels[i + 1], pixels[i + 2], alpha);
+      pixels[i] = nr;
+      pixels[i + 1] = ng;
+      pixels[i + 2] = nb;
     }
   }
 
