@@ -169,11 +169,12 @@ export async function convertEye(side, sphere, cylinder, axis) {
   return result.output;
 }
 
-export function formatResult(out) {
+export function formatResult(out, qty) {
   if (!out.ok) return out.error;
   const s = out.sphere.toFixed(2);
-  const c = out.cylinder === 0 ? '0.00' : out.cylinder.toFixed(2);
-  return `${s}/${c}×${out.axis}`;
+  const c = Math.round(Math.abs(out.cylinder) * 100);
+  const qtyPart = qty != null && qty !== '' ? `（${qty}盒）` : '';
+  return `${s},${c},${out.axis}${qtyPart}`;
 }
 
 export function formatSnappedInput(rec) {

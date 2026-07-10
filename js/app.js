@@ -86,7 +86,7 @@ function renderResults(results) {
   resultBody.innerHTML = results
     .map(({ input, output, adjustments }) => {
       const inStr = formatRx(input);
-      const outStr = output.ok ? formatResult(output) : output.error;
+      const outStr = output.ok ? formatResult(output, input.qty) : output.error;
       const rowClass = output.ok ? 'row-ok' : 'row-error';
       const alignNote =
         adjustments?.length > 0
@@ -195,10 +195,7 @@ function handleCopy() {
   if (!lastResults.length) return;
   const lines = lastResults
     .filter((r) => r.output.ok)
-    .map(({ input, output }) => {
-      const qty = input.qty ? ` ${input.qty}盒` : '';
-      return `${input.eye} ${formatResult(output)}${qty}`;
-    });
+    .map(({ input, output }) => formatResult(output, input.qty));
   navigator.clipboard.writeText(lines.join('\n')).then(() => {
     $('btnCopy').textContent = '已复制 ✓';
     setTimeout(() => {
