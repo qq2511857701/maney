@@ -13,7 +13,6 @@ const previewWrap = $('wmPreviewWrap');
 const originalCanvas = $('wmOriginal');
 const resultImg = $('wmResult');
 const resultPlaceholder = $('wmResultPlaceholder');
-const btnProcess = $('wmProcess');
 const btnDownload = $('wmDownload');
 const btnClear = $('wmClear');
 
@@ -56,18 +55,16 @@ async function loadPreview(file) {
   resizeCanvasToDisplay(originalCanvas);
 
   previewWrap.hidden = false;
-  btnProcess.disabled = false;
-  setHint(`已加载 ${file.name}（${canvas.width}×${canvas.height}）`, 'ok');
+  setHint(`已加载 ${file.name}（${canvas.width}×${canvas.height}），正在去水印…`);
+  await handleProcess(canvas);
 }
 
-async function handleProcess() {
+async function handleProcess(srcCanvas) {
   if (!currentFile) return;
-  btnProcess.disabled = true;
-  btnProcess.textContent = '处理中…';
   setHint('正在去除右下角「豆包AI生成」水印…');
 
   try {
-    const src = await fileToCanvas(currentFile);
+    const src = srcCanvas || (await fileToCanvas(currentFile));
     const out = await removeDoubaoWatermark(src);
 
     const ext = currentFile.name.split('.').pop()?.toLowerCase();
@@ -96,9 +93,6 @@ async function handleProcess() {
   } catch (e) {
     clearResultPreview();
     setHint(`处理失败：${e.message}`, 'error');
-  } finally {
-    btnProcess.disabled = false;
-    btnProcess.textContent = '去除水印';
   }
 }
 
@@ -117,7 +111,6 @@ function handleClear() {
   currentFile = null;
   fileInput.value = '';
   previewWrap.hidden = true;
-  btnProcess.disabled = true;
   clearResultPreview();
   setHint('');
 }
@@ -144,7 +137,6 @@ function bindDropZone() {
 export function initWatermarkApp() {
   if (!dropZone) return;
   bindDropZone();
-  btnProcess.addEventListener('click', handleProcess);
   btnDownload.addEventListener('click', handleDownload);
   btnClear.addEventListener('click', handleClear);
 }
