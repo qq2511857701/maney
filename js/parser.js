@@ -312,3 +312,12 @@ export function formatRx(record) {
   const a = record.axis;
   return `${s}/${c}×${a}`;
 }
+
+/** 订单行格式：－3.25,75,180（2盒） */
+export function formatOrderLine({ sphere, cylinder, axis, qty }) {
+  const s =
+    sphere < 0 ? `－${Math.abs(sphere).toFixed(2)}` : sphere.toFixed(2);
+  const c = Math.round(Math.abs(cylinder) * 100);
+  const qtyPart = qty != null && qty !== '' ? `（${qty}盒）` : '';
+  return `${s},${c},${axis}${qtyPart}`;
+}
