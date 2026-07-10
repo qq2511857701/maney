@@ -211,12 +211,6 @@ function calcGold(xauPerCny, usdPerCny) {
     { primary: true, text: `1 金衡盎司 ≈ ${fmtNum(cnyPerOz, 2)} CNY` },
     { primary: true, text: `1 克 ≈ ${fmtNum(cnyPerGram, 2)} CNY` },
   ];
-  if (usdPerOz) {
-    core.push({
-      primary: true,
-      text: `国际金价 ≈ ${fmtNum(usdPerOz, 2)} USD/盎司`,
-    });
-  }
 
   const cfg = CURRENCIES.find((c) => c.id === 'xau');
   const extras = (cfg?.amounts || []).map(({ label, grams }) => ({
@@ -224,10 +218,12 @@ function calcGold(xauPerCny, usdPerCny) {
     text: `${label} ≈ ${fmtNum(grams * cnyPerGram, 2)} CNY`,
   }));
 
-  extras.push({
-    primary: false,
-    text: `1 克 ≈ ${fmtNum(cnyPerGram, 2)} 元（现货参考）`,
-  });
+  if (usdPerOz) {
+    extras.unshift({
+      primary: false,
+      text: `国际金价 ≈ ${fmtNum(usdPerOz, 2)} USD/盎司`,
+    });
+  }
 
   return { core, extras };
 }
