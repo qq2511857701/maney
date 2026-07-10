@@ -1,16 +1,19 @@
 /**
- * 豆包 AI 水印去除
- * 仅对「实测存在白色半透明叠加」的像素做反混合，不整块涂抹
+ * 豆包「豆包AI生成」水印去除 — 精简版
+ *
+ * 思路（与开源 doubao-watermark-remover 一致）：
+ * 1. 定位右下角水印区域
+ * 2. 仅处理 alpha 贴图中「文字笔画」位置（高 alpha + 区域在右侧）
+ * 3. 用该列上方背景色替换，不整块打码
  */
 
 const ALPHA_MAP_URL = new URL('../assets/doubao_alpha.png', import.meta.url).href;
 const ALPHA_MAP_CDN =
   'https://cdn.jsdelivr.net/gh/zhengsuanfa/doubao-watermark-remover@main/assets/doubao_alpha.png';
-const MIN_MAP_ALPHA = 0.35;
-const MIN_OBSERVED = 0.14;
+const ALPHA_THRESHOLD = 0.82;
+const TEXT_COL_RATIO = 0.38;
 const MARGIN_BOTTOM = 5;
 const MAX_DIMENSION = 4096;
-const WATERMARK_LUM = 255;
 
 let alphaMapCache = null;
 
@@ -33,26 +36,6 @@ function calculatePosition(width, height, logoWidth, logoHeight, marginRight) {
   };
 }
 
-function readAlphaFromImageData(data, width, height) {
-  const map = new Float32Array(width * height);
-  for (let i = 0; i < width * height; i++) {
-    map[i] = Math.max(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]) / 255;
-  }
-  return map;
-}
-
-function scaleAlphaNearest(srcMap, srcW, srcH, dstW, dstH) {
-  const dst = new Float32Array(dstW * dstH);
-  for (let row = 0; row < dstH; row++) {
-    const srcRow = Math.min(srcH - 1, Math.floor((row * srcH) / dstH));
-    for (let col = 0; col < dstW; col++) {
-      const srcCol = Math.min(srcW - 1, Math.floor((col * srcW) / dstW));
-      dst[row * dstW + col] = srcMap[srcRow * srcW + srcCol];
-    }
-  }
-  return dst;
-}
-
 async function fetchAlphaBlob() {
   for (const url of [ALPHA_MAP_URL, ALPHA_MAP_CDN]) {
     try {
@@ -62,7 +45,7 @@ async function fetchAlphaBlob() {
       /* try next */
     }
   }
-  throw new Error('alpha map unavailable');
+  throw new Error('无法加载水印贴图');
 }
 
 async function loadAlphaMap(logoWidth, logoHeight) {
@@ -78,71 +61,53 @@ async function loadAlphaMap(logoWidth, logoHeight) {
   canvas.height = srcH;
   canvas.getContext('2d').drawImage(bmp, 0, 0);
   bmp.close();
+
   const { data } = canvas.getContext('2d').getImageData(0, 0, srcW, srcH);
-  const srcMap = readAlphaFromImageData(data, srcW, srcH);
-  const alphaMap = scaleAlphaNearest(srcMap, srcW, srcH, logoWidth, logoHeight);
-  alphaMapCache = { key, map: alphaMap };
-  return alphaMap;
+  const map = new Float32Array(logoWidth * logoHeight);
+  for (let row = 0; row < logoHeight; row++) {
+    const srcRow = Math.min(srcH - 1, Math.floor((row * srcH) / logoHeight));
+    for (let col = 0; col < logoWidth; col++) {
+      const srcCol = Math.min(srcW - 1, Math.floor((col * srcW) / logoWidth));
+      const idx = (srcRow * srcW + srcCol) * 4;
+      map[row * logoWidth + col] =
+        Math.max(data[idx], data[idx + 1], data[idx + 2]) / 255;
+    }
+  }
+
+  alphaMapCache = { key, map };
+  return map;
 }
 
 function scaleCanvasIfNeeded(sourceCanvas) {
-  const { width, height } = sourceCanvas;
-  const maxSide = Math.max(width, height);
-  if (maxSide <= MAX_DIMENSION) return { canvas: sourceCanvas, scale: 1 };
+  const maxSide = Math.max(sourceCanvas.width, sourceCanvas.height);
+  if (maxSide <= MAX_DIMENSION) return sourceCanvas;
 
   const scale = MAX_DIMENSION / maxSide;
-  const w = Math.round(width * scale);
-  const h = Math.round(height * scale);
+  const w = Math.round(sourceCanvas.width * scale);
+  const h = Math.round(sourceCanvas.height * scale);
   const scaled = document.createElement('canvas');
   scaled.width = w;
   scaled.height = h;
   scaled.getContext('2d').drawImage(sourceCanvas, 0, 0, w, h);
-  return { canvas: scaled, scale };
+  return scaled;
 }
 
-function unblendWhite(r, g, b, alpha) {
-  const a = Math.min(0.96, Math.max(0.05, alpha));
-  const inv = 1 - a;
-  return [
-    Math.max(0, Math.min(255, Math.round((r - a * WATERMARK_LUM) / inv))),
-    Math.max(0, Math.min(255, Math.round((g - a * WATERMARK_LUM) / inv))),
-    Math.max(0, Math.min(255, Math.round((b - a * WATERMARK_LUM) / inv))),
-  ];
+function medianColor(samples) {
+  if (!samples.length) return [100, 100, 100];
+  const sorted = [...samples].sort((a, b) => a[0] + a[1] + a[2] - (b[0] + b[1] + b[2]));
+  return sorted[Math.floor(sorted.length / 2)];
 }
 
-function observedOverlayAlpha(r, g, b, refR, refG, refB) {
-  const channels = [0, 1, 2].map((c) => {
-    const ch = [r, g, b][c];
-    const ref = [refR, refG, refB][c];
-    const denom = WATERMARK_LUM - ref;
-    if (denom < 10) return 0;
-    return (ch - ref) / denom;
-  });
-  return Math.max(0, Math.min(1, Math.max(...channels)));
+function seededNoise(x, y) {
+  const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+  return Math.floor((n - Math.floor(n)) * 5) - 2;
 }
 
-/** 取同行左侧、贴图低 alpha 处的颜色作为背景参考，避免倒影被误判 */
-function sampleLocalBg(pixels, width, startX, y, col, rowOffset, alphaMap, logoWidth) {
-  for (let c = col - 1; c >= 0; c--) {
-    if (alphaMap[rowOffset + c] < MIN_MAP_ALPHA) {
-      const x = startX + c;
-      const i = (y * width + x) * 4;
-      return [pixels[i], pixels[i + 1], pixels[i + 2]];
-    }
-  }
-  const sy = Math.max(0, y - 10);
-  const x = startX + col;
-  const i = (sy * width + x) * 4;
-  return [pixels[i], pixels[i + 1], pixels[i + 2]];
-}
-
-/**
- * 去除豆包水印，返回处理后的 canvas
- */
 export async function removeDoubaoWatermark(sourceCanvas) {
-  const { canvas: workCanvas } = scaleCanvasIfNeeded(sourceCanvas);
+  const workCanvas = scaleCanvasIfNeeded(sourceCanvas);
   const width = workCanvas.width;
   const height = workCanvas.height;
+
   const out = document.createElement('canvas');
   out.width = width;
   out.height = height;
@@ -152,7 +117,7 @@ export async function removeDoubaoWatermark(sourceCanvas) {
   const { logoWidth, logoHeight, marginRight } = detectWatermarkConfig(width, height);
   const { startX, startY } = calculatePosition(width, height, logoWidth, logoHeight, marginRight);
   const alphaMap = await loadAlphaMap(logoWidth, logoHeight);
-  const textColStart = Math.floor(logoWidth * 0.42);
+  const textColStart = Math.floor(logoWidth * TEXT_COL_RATIO);
 
   let imageData;
   try {
@@ -162,41 +127,48 @@ export async function removeDoubaoWatermark(sourceCanvas) {
   }
   const pixels = imageData.data;
 
+  const getPixel = (x, y) => {
+    const i = (y * width + x) * 4;
+    return [pixels[i], pixels[i + 1], pixels[i + 2]];
+  };
+
+  const setPixel = (x, y, r, g, b) => {
+    const i = (y * width + x) * 4;
+    pixels[i] = r;
+    pixels[i + 1] = g;
+    pixels[i + 2] = b;
+  };
+
+  const bgByCol = new Array(logoWidth);
+  for (let col = 0; col < logoWidth; col++) {
+    const samples = [];
+    for (let sy = Math.max(0, startY - 50); sy < startY; sy++) {
+      const sx = startX + col;
+      if (sx >= 0 && sx < width) samples.push(getPixel(sx, sy));
+    }
+    bgByCol[col] = medianColor(samples);
+  }
+
   for (let row = 0; row < logoHeight; row++) {
     const y = startY + row;
     if (y < 0 || y >= height) continue;
-    const rowOffset = row * logoWidth;
-    for (let col = 0; col < logoWidth; col++) {
-      const mapAlpha = alphaMap[rowOffset + col];
-      if (mapAlpha < MIN_MAP_ALPHA) continue;
-      if (col < textColStart && mapAlpha < 0.72) continue;
+
+    for (let col = textColStart; col < logoWidth; col++) {
+      const alpha = alphaMap[row * logoWidth + col];
+      if (alpha < ALPHA_THRESHOLD) continue;
 
       const x = startX + col;
       if (x < 0 || x >= width) continue;
 
-      const i = (y * width + x) * 4;
-      const r = pixels[i];
-      const g = pixels[i + 1];
-      const b = pixels[i + 2];
-      const [refR, refG, refB] = sampleLocalBg(
-        pixels,
-        width,
-        startX,
+      const [bgR, bgG, bgB] = bgByCol[col];
+      const n = seededNoise(x, y);
+      setPixel(
+        x,
         y,
-        col,
-        rowOffset,
-        alphaMap,
-        logoWidth
+        Math.max(0, Math.min(255, bgR + n)),
+        Math.max(0, Math.min(255, bgG + n)),
+        Math.max(0, Math.min(255, bgB + n))
       );
-
-      const observed = observedOverlayAlpha(r, g, b, refR, refG, refB);
-      if (observed < MIN_OBSERVED) continue;
-
-      const useAlpha = Math.min(0.96, Math.max(observed, mapAlpha >= 0.72 ? observed : 0));
-      const [nr, ng, nb] = unblendWhite(r, g, b, useAlpha);
-      pixels[i] = nr;
-      pixels[i + 1] = ng;
-      pixels[i + 2] = nb;
     }
   }
 
@@ -226,17 +198,10 @@ export function fileToCanvas(file) {
 
 export function canvasToBlob(canvas, type = 'image/jpeg', quality = 0.92) {
   return new Promise((resolve, reject) => {
-    try {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error('导出失败'));
-        },
-        type,
-        quality
-      );
-    } catch (e) {
-      reject(e);
-    }
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('导出失败'))),
+      type,
+      quality
+    );
   });
 }
