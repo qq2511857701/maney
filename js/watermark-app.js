@@ -82,15 +82,15 @@ async function handleProcess() {
     if (resultObjectUrl) URL.revokeObjectURL(resultObjectUrl);
     resultObjectUrl = URL.createObjectURL(blob);
 
-    resultImg.onload = () => {
-      resultImg.hidden = false;
-      resultPlaceholder.hidden = true;
-    };
-    resultImg.onerror = () => {
-      throw new Error('预览加载失败');
-    };
-    resultImg.src = resultObjectUrl;
+    await new Promise((resolve, reject) => {
+      resultImg.onload = () => resolve();
+      resultImg.onerror = () => reject(new Error('预览加载失败'));
+      resultImg.src = resultObjectUrl;
+      if (resultImg.complete) resolve();
+    });
 
+    resultImg.hidden = false;
+    resultPlaceholder.hidden = true;
     btnDownload.disabled = false;
     setHint('处理完成，可下载或对比左右效果', 'ok');
   } catch (e) {
