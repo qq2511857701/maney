@@ -1,21 +1,29 @@
 /**
  * 豆包「豆包AI生成」水印去除
  *
- * 水印实际约占 120×20 @288px 参考尺寸，紧贴右下角。
- * 不再使用 1.2× 放大检测框（会把倒影区包进去）。
+ * alpha 贴图整块矩形最低值约 0.15（不是纯黑底），若阈值过低会把
+ * 倒影/水面一起替换。因此：
+ * - 左侧 44% 区域永不处理（倒影常落在此）
+ * - 主阈值 0.72 只处理文字笔画
+ * - 右侧边缘区 0.52~0.72 且实测有叠加时才补扫
+ * - 用同列上方背景色替换，不做全区域亮度扫描
  */
 
 const ALPHA_MAP_URL = new URL('../assets/doubao_alpha.png', import.meta.url).href;
 const ALPHA_MAP_CDN =
   'https://cdn.jsdelivr.net/gh/zhengsuanfa/doubao-watermark-remover@main/assets/doubao_alpha.png';
-const ALPHA_THRESHOLD = 0.15;
-const MARGIN_BOTTOM = 5;
-const MAX_DIMENSION = 4096;
-const WHITE = 255;
 
+const ALPHA_TEXT = 0.72;
+const ALPHA_EDGE = 0.52;
+const TEXT_COL_MIN = 0.44;
+const EDGE_COL_MIN = 0.58;
+const MARGIN_BOTTOM = 5;
+const REF_GAP = 14;
+const MAX_DIMENSION = 4096;
+
+/** @type {{ key: string, map: Float32Array } | null} */
 let alphaMapCache = null;
 
-/** 精确水印区域（与豆包输出一致，不额外放大） */
 function detectWatermarkConfig(width, height) {
   const scale = Math.min(width, height) / 288;
   return {
@@ -88,37 +96,20 @@ function scaleCanvasIfNeeded(sourceCanvas) {
   return scaled;
 }
 
-function medianColor(samples) {
-  if (!samples.length) return [100, 100, 100];
-  const sorted = [...samples].sort((a, b) => a[0] + a[1] + a[2] - (b[0] + b[1] + b[2]));
-  return sorted[Math.floor(sorted.length / 2)];
+function hasOverlay(r, g, b, refR, refG, refB, mapAlpha) {
+  const absDiff = Math.abs(r + g + b - (refR + refG + refB));
+  if (mapAlpha >= 0.85) return absDiff >= 2;
+  if (mapAlpha >= ALPHA_TEXT) return absDiff >= 4;
+  if (mapAlpha >= ALPHA_EDGE) return absDiff >= 8;
+  return false;
 }
 
-function seededNoise(x, y) {
-  const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
-  return Math.floor((n - Math.floor(n)) * 5) - 2;
-}
-
-function unblend(r, g, b, alpha) {
-  const a = Math.min(0.97, Math.max(0.05, alpha));
-  const inv = 1 - a;
-  return [
-    Math.max(0, Math.min(255, Math.round((r - a * WHITE) / inv))),
-    Math.max(0, Math.min(255, Math.round((g - a * WHITE) / inv))),
-    Math.max(0, Math.min(255, Math.round((b - a * WHITE) / inv))),
-  ];
-}
-
-function overlayAlpha(r, g, b, refR, refG, refB) {
-  return Math.max(
-    0,
-    ...[0, 1, 2].map((c) => {
-      const ch = [r, g, b][c];
-      const ref = [refR, refG, refB][c];
-      const denom = WHITE - ref;
-      return denom < 8 ? 0 : (ch - ref) / denom;
-    })
-  );
+function shouldProcess(mapAlpha, col, logoWidth) {
+  const colRatio = col / logoWidth;
+  if (colRatio < TEXT_COL_MIN) return false;
+  if (mapAlpha >= ALPHA_TEXT) return true;
+  if (mapAlpha >= ALPHA_EDGE && colRatio >= EDGE_COL_MIN) return true;
+  return false;
 }
 
 export async function removeDoubaoWatermark(sourceCanvas) {
@@ -135,6 +126,7 @@ export async function removeDoubaoWatermark(sourceCanvas) {
   const { logoWidth, logoHeight, marginRight } = detectWatermarkConfig(width, height);
   const { startX, startY } = calculatePosition(width, height, logoWidth, logoHeight, marginRight);
   const alphaMap = await loadAlphaMap(logoWidth, logoHeight);
+  const refY = Math.max(0, startY - REF_GAP);
 
   let imageData;
   try {
@@ -156,43 +148,22 @@ export async function removeDoubaoWatermark(sourceCanvas) {
     pixels[i + 2] = b;
   };
 
-  const bgByCol = new Array(logoWidth);
-  for (let col = 0; col < logoWidth; col++) {
-    const samples = [];
-    for (let sy = Math.max(0, startY - 40); sy < startY; sy++) {
-      const sx = startX + col;
-      if (sx >= 0 && sx < width) samples.push(getPixel(sx, sy));
-    }
-    bgByCol[col] = medianColor(samples);
-  }
-
   for (let row = 0; row < logoHeight; row++) {
     const y = startY + row;
     if (y < 0 || y >= height) continue;
 
     for (let col = 0; col < logoWidth; col++) {
       const mapAlpha = alphaMap[row * logoWidth + col];
-      if (mapAlpha < ALPHA_THRESHOLD) continue;
+      if (!shouldProcess(mapAlpha, col, logoWidth)) continue;
 
       const x = startX + col;
       if (x < 0 || x >= width) continue;
 
       const [r, g, b] = getPixel(x, y);
-      const [bgR, bgG, bgB] = bgByCol[col];
-      const observed = overlayAlpha(r, g, b, bgR, bgG, bgB);
+      const ref = getPixel(x, refY);
+      if (!hasOverlay(r, g, b, ref[0], ref[1], ref[2], mapAlpha)) continue;
 
-      let nr;
-      let ng;
-      let nb;
-      if (observed >= 0.1) {
-        [nr, ng, nb] = unblend(r, g, b, Math.max(observed, mapAlpha));
-      } else {
-        const n = seededNoise(x, y);
-        nr = Math.max(0, Math.min(255, bgR + n));
-        ng = Math.max(0, Math.min(255, bgG + n));
-        nb = Math.max(0, Math.min(255, bgB + n));
-      }
-      setPixel(x, y, nr, ng, nb);
+      setPixel(x, y, ref[0], ref[1], ref[2]);
     }
   }
 
