@@ -91,6 +91,16 @@ OD: -5.75 / -1.25 x 10
 
 ---
 
+## 功能三：豆包 AI 去水印
+
+**去水印** Tab → 上传或拖拽豆包生成的图片 →「去除水印」→ 对比预览 →「下载结果」
+
+- 纯浏览器本地处理，图片不上传服务器
+- 去除右下角「豆包AI生成」可见文字水印
+- 算法来自 [doubao-watermark-remover](https://github.com/zhengsuanfa/doubao-watermark-remover)
+
+---
+
 ## 部署到 GitHub Pages
 
 ```bash

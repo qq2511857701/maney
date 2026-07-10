@@ -18,6 +18,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab-btn active" data-tab="convert" role="tab">度数换算</button>
       <button class="tab-btn" data-tab="purchase" role="tab">批量采购</button>
+      <button class="tab-btn" data-tab="watermark" role="tab">去水印</button>
     </nav>
 
     <section class="rate-panel" id="ratePanel" aria-live="polite"></section>
@@ -141,6 +142,45 @@
           <li>在 lensfit 页面右下角面板 →「从剪贴板加载」→「开始加购」</li>
         </ol>
         <p class="hint">脚本只负责填表并加入购物车，结算请自行完成。</p>
+      </section>
+    </div>
+
+    <div data-tab-panel="watermark" hidden>
+      <section class="card">
+        <h2>豆包 AI 图片去水印</h2>
+        <p class="hint">去除右下角「豆包AI生成」文字水印，纯浏览器本地处理，图片不会上传。</p>
+        <div class="wm-dropzone" id="wmDropZone">
+          <input type="file" id="wmFileInput" accept="image/*" hidden />
+          <p class="wm-dropzone-text">点击或拖拽图片到此处</p>
+          <p class="wm-dropzone-sub">支持 JPG / PNG</p>
+        </div>
+        <p class="hint" id="wmHint"></p>
+        <div class="actions">
+          <button class="btn btn-primary" id="wmProcess" disabled>去除水印</button>
+          <button class="btn btn-primary" id="wmDownload" disabled>下载结果</button>
+          <button class="btn btn-secondary" id="wmClear">清除</button>
+        </div>
+      </section>
+
+      <section class="card" id="wmPreviewWrap" hidden>
+        <h2>对比预览</h2>
+        <div class="wm-preview-grid">
+          <div class="wm-preview-item">
+            <p class="wm-preview-label">原图</p>
+            <canvas id="wmOriginal"></canvas>
+          </div>
+          <div class="wm-preview-item">
+            <p class="wm-preview-label">处理后</p>
+            <canvas id="wmResult"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section class="card purchase-guide">
+        <h2>说明</h2>
+        <p class="hint">算法移植自开源项目
+          <a href="https://github.com/zhengsuanfa/doubao-watermark-remover" target="_blank" rel="noopener">doubao-watermark-remover</a>，
+          仅去除可见文字水印，效果因图片尺寸而异。</p>
       </section>
     </div>
   </div>

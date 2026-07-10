@@ -645,3 +645,65 @@ td input:focus {
     transform: none;
   }
 }
+
+/* ── 去水印 ── */
+
+.wm-dropzone {
+  border: 2px dashed #90caf9;
+  border-radius: 12px;
+  padding: 36px 20px;
+  text-align: center;
+  background: linear-gradient(135deg, #f5f9ff 0%, #e8f4fd 100%);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.wm-dropzone:hover,
+.wm-dropzone.is-dragover {
+  border-color: #1976d2;
+  background: #e3f2fd;
+  transform: translateY(-1px);
+}
+
+.wm-dropzone-text {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  color: #1565c0;
+  font-weight: 600;
+}
+
+.wm-dropzone-sub {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #78909c;
+}
+
+.wm-preview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.wm-preview-item {
+  text-align: center;
+}
+
+.wm-preview-label {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: #546e7a;
+  font-weight: 600;
+}
+
+.wm-preview-item canvas {
+  max-width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  background: #eceff1;
+}
+
+@media (max-width: 640px) {
+  .wm-preview-grid {
+    grid-template-columns: 1fr;
+  }
+}
