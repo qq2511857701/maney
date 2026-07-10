@@ -5,8 +5,8 @@
 
 const ALPHA_MAP_URL =
   'https://cdn.jsdelivr.net/gh/zhengsuanfa/doubao-watermark-remover@main/assets/doubao_alpha.png';
-const ALPHA_THRESHOLD = 0.15;
-const MARGIN_BOTTOM = 5;
+const ALPHA_THRESHOLD = 0.05;
+const MARGIN_BOTTOM = 3;
 const MAX_DIMENSION = 4096;
 
 let alphaMapCache = null;
@@ -15,12 +15,12 @@ function detectWatermarkConfig(width, height) {
   if (width > 1024 || height > 1024) {
     const scale = Math.min(width, height) / 288;
     return {
-      logoWidth: Math.floor(120 * scale * 1.2),
-      logoHeight: Math.floor(20 * scale * 1.5),
-      marginRight: Math.floor(10 * scale),
+      logoWidth: Math.floor(120 * scale * 1.4),
+      logoHeight: Math.floor(20 * scale * 1.6),
+      marginRight: Math.max(2, Math.floor(5 * scale)),
     };
   }
-  return { logoWidth: 90, logoHeight: 18, marginRight: 8 };
+  return { logoWidth: 100, logoHeight: 22, marginRight: 4 };
 }
 
 function calculatePosition(width, height, logoWidth, logoHeight, marginRight) {
@@ -97,6 +97,54 @@ function seededNoise(x, y) {
   return Math.floor((n - Math.floor(n)) * 7) - 3;
 }
 
+function fillWithBg(setPixel, x, y, bg, noise) {
+  setPixel(
+    x,
+    y,
+    Math.max(0, Math.min(255, bg[0] + noise)),
+    Math.max(0, Math.min(255, bg[1] + noise)),
+    Math.max(0, Math.min(255, bg[2] + noise))
+  );
+}
+
+/** 右下角边缘残留：半透明白字比背景更亮 */
+function isLikelyWatermarkPixel(r, g, b, bgR, bgG, bgB) {
+  const bgAvg = (bgR + bgG + bgB) / 3;
+  const avg = (r + g + b) / 3;
+  const maxDiff = Math.max(Math.abs(r - bgR), Math.abs(g - bgG), Math.abs(b - bgB));
+  return avg > bgAvg + 6 && maxDiff > 10 && r > 160 && g > 160 && b > 155;
+}
+
+function cleanupEdgeResidual({
+  width,
+  height,
+  startX,
+  startY,
+  logoWidth,
+  logoHeight,
+  getPixel,
+  setPixel,
+  bgColorMap,
+  leftBg,
+}) {
+  const padBottom = 6;
+  const x0 = Math.max(0, startX);
+  const x1 = width - 1;
+  const y0 = Math.max(0, startY);
+  const y1 = Math.min(height - 1, startY + logoHeight + padBottom);
+
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const col = Math.min(logoWidth - 1, Math.max(0, x - startX));
+      const bg = bgColorMap[col] || leftBg;
+      const [r, g, b] = getPixel(x, y);
+      if (isLikelyWatermarkPixel(r, g, b, bg[0], bg[1], bg[2])) {
+        fillWithBg(setPixel, x, y, bg, seededNoise(x, y));
+      }
+    }
+  }
+}
+
 /**
  * 去除豆包水印，返回处理后的 canvas
  */
@@ -163,18 +211,23 @@ export async function removeDoubaoWatermark(sourceCanvas) {
 
       const alpha = alphaMap[alphaRowOffset + col];
       if (alpha > ALPHA_THRESHOLD) {
-        const [bgR, bgG, bgB] = bgColorMap[col] || leftBg;
-        const noise = seededNoise(x, y);
-        setPixel(
-          x,
-          y,
-          Math.max(0, Math.min(255, bgR + noise)),
-          Math.max(0, Math.min(255, bgG + noise)),
-          Math.max(0, Math.min(255, bgB + noise))
-        );
+        fillWithBg(setPixel, x, y, bgColorMap[col] || leftBg, seededNoise(x, y));
       }
     }
   }
+
+  cleanupEdgeResidual({
+    width,
+    height,
+    startX,
+    startY,
+    logoWidth,
+    logoHeight,
+    getPixel,
+    setPixel,
+    bgColorMap,
+    leftBg,
+  });
 
   ctx.putImageData(imageData, 0, 0);
   return out;
