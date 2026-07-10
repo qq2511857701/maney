@@ -1,0 +1,123 @@
+{
+  "mouseover": [{
+    "selector": "#waifu-tool-hitokoto",
+    "text": ["来一句随机一言吧～", "说不定能碰到有趣的话呢"]
+  }, {
+    "selector": "#waifu-tool-switch-model",
+    "text": ["要换我看板娘吗？", "试试另一个造型吧～"]
+  }, {
+    "selector": "#waifu-tool-photo",
+    "text": ["给我拍张照吧！", "一二三，茄子～"]
+  }, {
+    "selector": "#waifu-tool-quit",
+    "text": ["要把我藏起来吗？", "下次再来找我玩哦～"]
+  }, {
+    "selector": ".tab-btn[data-tab=\"convert\"]",
+    "text": ["度数换算在这边～", "粘贴验光单，我来帮你看！"]
+  }, {
+    "selector": ".tab-btn[data-tab=\"purchase\"]",
+    "text": ["批量采购清单在这里哦", "记得核对柱镜和盒数～"]
+  }, {
+    "selector": ".tab-btn[data-tab=\"watermark\"]",
+    "text": ["上传豆包截图，我去水印～", "处理后记得对比原图哦"]
+  }, {
+    "selector": ".tab-btn[data-tab=\"tools\"]",
+    "text": ["这些小工具都是免费的～", "点卡片会在新标签打开"]
+  }, {
+    "selector": "#textInput",
+    "text": ["把验光数据粘贴到这里吧", "支持聊天格式、验光单和订单行哦"]
+  }, {
+    "selector": "#btnConvert",
+    "text": ["核对无误后点我换算～", "顶点距离按 12mm 计算"]
+  }, {
+    "selector": "#btnCopy",
+    "text": ["换算完记得复制结果～", "格式是逗号订单行，方便粘贴"]
+  }, {
+    "selector": "#purchaseInput",
+    "text": ["把采购清单粘贴到这里", "解析后可以复制采购队列"]
+  }, {
+    "selector": "#btnPurchaseExport",
+    "text": ["复制后可以配合油猴脚本加购哦"]
+  }, {
+    "selector": "#wmDropZone",
+    "text": ["拖入或点击上传图片", "专门处理豆包水印～"]
+  }, {
+    "selector": "#ratePanel",
+    "text": ["实时汇率和金价在这边", "点击可以展开更多"]
+  }, {
+    "selector": ".tool-card",
+    "text": ["要去看看 {text} 吗？", "这个工具免费又好用～"]
+  }],
+  "click": [{
+    "selector": "#btnCopy",
+    "text": ["复制成功了吗？记得发给客户哦～"]
+  }, {
+    "selector": "#btnPurchaseExport",
+    "text": ["采购队列已复制，去 Lensfit 加购吧！"]
+  }],
+  "seasons": [{
+    "date": "01/01",
+    "text": "元旦快乐！{year} 年也要好好工作哦～"
+  }, {
+    "date": "02/14",
+    "text": "情人节到了，记得给客户多一点耐心～"
+  }, {
+    "date": "05/01",
+    "text": "劳动节快乐！今天也要认真换算哦～"
+  }, {
+    "date": "10/01",
+    "text": "国庆节快乐！"
+  }, {
+    "date": "12/20-12/31",
+    "text": "年末了，记得核对库存和订单～"
+  }],
+  "time": [{
+    "hour": "6-7",
+    "text": "早上好！新的一天，换算加油～"
+  }, {
+    "hour": "8-11",
+    "text": "上午好！工作顺利吗？记得起来活动活动哦"
+  }, {
+    "hour": "12-13",
+    "text": "中午了，先吃饭再干活～"
+  }, {
+    "hour": "14-17",
+    "text": "下午好，有需要换算的数据吗？"
+  }, {
+    "hour": "18-19",
+    "text": "傍晚了，今天处理多少单啦？"
+  }, {
+    "hour": "20-21",
+    "text": "晚上好，还在加班吗？"
+  }, {
+    "hour": "22-23",
+    "text": ["已经这么晚了，早点休息吧～", "深夜要爱护眼睛哦"]
+  }, {
+    "hour": "0-5",
+    "text": "这么晚还不睡？明天还要上班呢～"
+  }],
+  "message": {
+    "default": ["嗨～需要帮忙吗？", "点上面的页签可以切换功能哦", "有验光单就粘贴过来吧！", "我在这里陪你工作～"],
+    "console": "被你发现控制台啦～",
+    "copy": "复制了什么呢？记得核对一下哦",
+    "visibilitychange": "你回来啦～",
+    "changeSuccess": "新衣服好看吗？",
+    "changeFail": "还没有其他衣服呢～",
+    "photo": "照好了吗，是不是很可爱？",
+    "goodbye": "下次再来找我玩哦～",
+    "hitokoto": "这句一言来自「$1」，由 $2 在 hitokoto.cn 投稿。",
+    "welcome": "欢迎使用散光软镜工具～",
+    "referrer": "Hello！来自 $1 的朋友",
+    "hoverBody": ["干嘛呢～", "鼠标放错地方啦", "你在看什么呀？", "喵？", "有点痒…", "不要乱摸啦～", "我会脸红的", "再摸我要生气了哦"],
+    "tapBody": ["是不小心碰到了吧…", "你点我干嘛呀～", "需要帮忙就说一声嘛", "轻点轻点～", "我在呢，有什么事吗？"]
+  },
+  "models": [{
+    "name": "Potion-Maker/Pio",
+    "paths": ["https://fastly.jsdelivr.net/gh/fghrsh/live2d_api/model/Potion-Maker/Pio/index.json"],
+    "message": "我是 Pio 酱～"
+  }, {
+    "name": "Potion-Maker/Tia",
+    "paths": ["https://fastly.jsdelivr.net/gh/fghrsh/live2d_api/model/Potion-Maker/Tia/index.json"],
+    "message": "我是 Tia 酱～"
+  }]
+}

@@ -64,6 +64,103 @@ header p {
   color: #fff;
 }
 
+/* ── 页签翻页动画 ── */
+
+.tab-stage {
+  position: relative;
+  perspective: 1200px;
+}
+
+.tab-stage.is-animating {
+  overflow: hidden;
+}
+
+.tab-stage.is-animating [data-tab-panel] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  backface-visibility: hidden;
+}
+
+.tab-flip-in-forward {
+  animation: tabPageInForward 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 2;
+}
+
+.tab-flip-out-forward {
+  animation: tabPageOutForward 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 1;
+}
+
+.tab-flip-in-back {
+  animation: tabPageInBack 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 2;
+}
+
+.tab-flip-out-back {
+  animation: tabPageOutBack 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 1;
+}
+
+@keyframes tabPageInForward {
+  from {
+    opacity: 0.35;
+    transform: rotateY(24deg) translateX(32px);
+    transform-origin: left center;
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0deg) translateX(0);
+  }
+}
+
+@keyframes tabPageOutForward {
+  from {
+    opacity: 1;
+    transform: rotateY(0deg) translateX(0);
+    transform-origin: right center;
+  }
+  to {
+    opacity: 0;
+    transform: rotateY(-24deg) translateX(-32px);
+  }
+}
+
+@keyframes tabPageInBack {
+  from {
+    opacity: 0.35;
+    transform: rotateY(-24deg) translateX(-32px);
+    transform-origin: right center;
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0deg) translateX(0);
+  }
+}
+
+@keyframes tabPageOutBack {
+  from {
+    opacity: 1;
+    transform: rotateY(0deg) translateX(0);
+    transform-origin: left center;
+  }
+  to {
+    opacity: 0;
+    transform: rotateY(24deg) translateX(32px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-flip-in-forward,
+  .tab-flip-out-forward,
+  .tab-flip-in-back,
+  .tab-flip-out-back {
+    animation: none !important;
+  }
+}
+
 .row-warn td {
   background: #fff8e1;
 }
@@ -818,4 +915,84 @@ td input:focus {
   font-size: 0.85rem;
   color: #90caf9;
   margin-top: 1px;
+}
+
+/* ── Live2D 看板娘（右下角） ── */
+
+#waifu {
+  left: auto !important;
+  right: 0 !important;
+  z-index: 900;
+}
+
+#waifu.mascot-collapsed {
+  display: none !important;
+}
+
+#waifu #waifu-tips {
+  right: 8px;
+  left: auto;
+  margin: -30px 8px 0 0;
+}
+
+#waifu #waifu-tool {
+  right: auto;
+  left: 0;
+}
+
+#waifu-toggle {
+  display: none !important;
+}
+
+.mascot-collapse-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #546e7a;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition: background 0.2s, color 0.2s;
+}
+
+.mascot-collapse-btn:hover {
+  background: #1976d2;
+  color: #fff;
+}
+
+.mascot-open-btn {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 900;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 999px;
+  background: #1976d2;
+  color: #fff;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(25, 118, 210, 0.35);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.mascot-open-btn:hover {
+  background: #1565c0;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+  #waifu,
+  #waifu-toggle,
+  .mascot-open-btn {
+    display: none !important;
+  }
 }
