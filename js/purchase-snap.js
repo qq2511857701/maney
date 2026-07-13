@@ -57,7 +57,8 @@ export function snapPurchaseRecord(rec) {
     };
   }
 
-  const pwr = nearest(rec.sphere, PWR_OPTIONS);
+  const pwrOptions = product.pwrOptions ?? PWR_OPTIONS;
+  const pwr = nearest(rec.sphere, pwrOptions);
   const cy = nearest(rec.cylinder || 0, CY_OPTIONS);
   const ax = nearest(rec.axis || 0, product.axOptions);
 
