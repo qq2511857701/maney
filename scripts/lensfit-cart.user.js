@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Lensfit 批量加购
 // @namespace    maney-tools
-// @version      1.0.0
-// @description  从 maney 工具复制的 JSON 队列，自动填表加入 lensfit 购物车
+// @version      1.1.0
+// @description  从 maney 工具复制的 JSON 队列，自动填表加入 lensfit 购物车（支持散光与普通 BC 商品）
 // @match        https://www.lensfit.jp/*
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -116,7 +116,11 @@
   function findOption(select, target) {
     const t = String(target).trim();
     return [...select.options].find(
-      (o) => o.text.trim() === t || o.value.trim() === t
+      (o) =>
+        o.text.trim() === t ||
+        o.value.trim() === t ||
+        o.text.trim().startsWith(t) ||
+        o.value.trim().startsWith(t)
     );
   }
 
@@ -125,6 +129,17 @@
     if (!opt) throw new Error(`选项不存在：${target}`);
     select.value = opt.value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function itemLabel(item) {
+    if (item.kind === 'sphere' || item.bc) {
+      return `${item.productName} BC${item.bc} ${item.pwr} ×${item.qty}盒`;
+    }
+    return `${item.productName} ${item.pwr}/${item.cy}×${item.ax} ×${item.qty}盒`;
+  }
+
+  function isSphereItem(item) {
+    return item.kind === 'sphere' || Boolean(item.bc);
   }
 
   async function addToCartOnPage(item) {
@@ -137,16 +152,27 @@
     }
 
     const pwr = form.querySelector('select[name="PWR"]');
-    const cy = form.querySelector('select[name="CY"]');
-    const ax = form.querySelector('select[name="AX"]');
     const num = form.querySelector('select[name="NUM"]');
+    if (!pwr || !num) throw new Error('未找到度数/数量下拉框');
 
-    if (!pwr || !cy || !ax || !num) throw new Error('未找到度数下拉框');
-
-    setSelect(pwr, item.pwr);
-    setSelect(cy, item.cy);
-    setSelect(ax, item.ax);
-    setSelect(num, String(item.qty));
+    if (isSphereItem(item)) {
+      const bc =
+        form.querySelector('select[name="BC"]') ||
+        form.querySelector('select[name="BC_DIA"]') ||
+        form.querySelector('select[name="BCDIA"]');
+      if (!bc) throw new Error('未找到 BC 下拉框');
+      setSelect(bc, item.bc);
+      setSelect(pwr, item.pwr);
+      setSelect(num, String(item.qty));
+    } else {
+      const cy = form.querySelector('select[name="CY"]');
+      const ax = form.querySelector('select[name="AX"]');
+      if (!cy || !ax) throw new Error('未找到柱镜/轴位下拉框');
+      setSelect(pwr, item.pwr);
+      setSelect(cy, item.cy);
+      setSelect(ax, item.ax);
+      setSelect(num, String(item.qty));
+    }
 
     await sleep(300);
 
@@ -174,7 +200,7 @@
     }
 
     const item = queue.items[idx];
-    const label = `${item.productName} ${item.pwr}/${item.cy}×${item.ax} ×${item.qty}盒`;
+    const label = itemLabel(item);
     updateUI(`正在加购：${label}`);
 
     const pidMatch = location.pathname.includes(item.pid);

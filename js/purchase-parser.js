@@ -1,6 +1,7 @@
 /**
  * 采购清单解析：产品名 + 订单行度数
  * 散光日抛	－3.25,75,180（2盒）
+ * 普通双周	BC8.4 250度(1盒)
  */
 
 import { normalizeOcrText } from './parser.js';
@@ -17,6 +18,13 @@ function parseSphere(raw) {
   }
   const v = parseFloat(s);
   return Number.isNaN(v) ? null : v;
+}
+
+/** 中文「250度」类表述默认按近视（负）处理 */
+function parseSphereMyopia(raw) {
+  const v = parseSphere(raw);
+  if (v == null) return null;
+  return v > 0 ? -v : v;
 }
 
 function parseCylinder(raw) {
@@ -42,12 +50,6 @@ function parseAxis(raw) {
   return Number.isNaN(n) ? 0 : n;
 }
 
-function parseQty(raw) {
-  if (!raw) return 1;
-  const m = String(raw).match(/(\d+)/);
-  return m ? parseInt(m[1], 10) : 1;
-}
-
 function splitProductAndParams(line) {
   const trimmed = line.trim();
   if (!trimmed) return null;
@@ -55,6 +57,11 @@ function splitProductAndParams(line) {
   const tabParts = trimmed.split(/\t+/);
   if (tabParts.length >= 2) {
     return { productName: tabParts[0].trim(), params: tabParts.slice(1).join('\t').trim() };
+  }
+
+  const bcSpace = trimmed.match(/^(.+?)\s+(BC\s*[0-9.].+)$/i);
+  if (bcSpace) {
+    return { productName: bcSpace[1].trim(), params: bcSpace[2].trim() };
   }
 
   const spaceMatch = trimmed.match(/^(.+?)\s+(-?\d[\d.，,\s（(]+)$/);
@@ -68,10 +75,36 @@ function splitProductAndParams(line) {
   return null;
 }
 
-function parseParams(paramsStr) {
+function extractQty(paramsStr) {
   const qtyMatch = paramsStr.match(/[（(]\s*(\d+)\s*盒\s*[）)]/);
   const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
-  const withoutQty = paramsStr.replace(/[（(][^）)]*[）)]/g, '');
+  const withoutQty = paramsStr.replace(/[（(][^）)]*[）)]/g, '').trim();
+  return { qty, withoutQty };
+}
+
+/** 普通球镜：BC8.4 250度 / BC 8.8 -2.50 */
+function parseSphereParams(paramsStr) {
+  const { qty, withoutQty } = extractQty(paramsStr);
+  const m = withoutQty.match(/BC\s*([0-9.]+)\s+(-?\d+\.?\d*)\s*度?/i);
+  if (!m) return null;
+
+  const bc = parseFloat(m[1]);
+  const sphere = parseSphereMyopia(m[2]);
+  if (Number.isNaN(bc) || sphere == null) return null;
+
+  return {
+    kind: 'sphere',
+    bc,
+    sphere,
+    cylinder: 0,
+    axis: 0,
+    qty,
+  };
+}
+
+/** 散光：-3.25,75,180 */
+function parseToricParams(paramsStr) {
+  const { qty, withoutQty } = extractQty(paramsStr);
 
   const commaMatch = withoutQty.match(
     /(-?\d+\.?\d*)\s*[，,]\s*(-?\d+\.?\d*)\s*[，,]\s*(\d+)/
@@ -82,11 +115,16 @@ function parseParams(paramsStr) {
   if (sphere == null) return null;
 
   return {
+    kind: 'toric',
     sphere,
     cylinder: parseCylinder(commaMatch[2]),
     axis: parseAxis(commaMatch[3]),
     qty,
   };
+}
+
+function parseParams(paramsStr) {
+  return parseSphereParams(paramsStr) || parseToricParams(paramsStr);
 }
 
 function parsePurchaseLine(line, lineNum) {
@@ -103,6 +141,8 @@ function parsePurchaseLine(line, lineNum) {
     lineNum,
     productName: parts.productName || (product?.name ?? ''),
     productId,
+    kind: params.kind,
+    bc: params.bc ?? null,
     sphere: params.sphere,
     cylinder: params.cylinder,
     axis: params.axis,

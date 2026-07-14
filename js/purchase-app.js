@@ -1,6 +1,6 @@
 import { parsePurchaseText } from './purchase-parser.js';
 import { snapPurchaseRecords, buildCartQueue } from './purchase-snap.js';
-import { PRODUCTS } from './lensfit-products.js';
+import { PRODUCTS, isSphereProduct } from './lensfit-products.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -25,24 +25,45 @@ function productOptions(selectedId) {
   return placeholder + opts;
 }
 
+function bcOptions(selectedBc, productId) {
+  const product = PRODUCTS[productId];
+  const opts = product?.bcOptions || [8.4, 8.8];
+  const selected = selectedBc ?? opts[0];
+  return opts
+    .map(
+      (bc) =>
+        `<option value="${bc}" ${Number(bc) === Number(selected) ? 'selected' : ''}>${bc}</option>`
+    )
+    .join('');
+}
+
 function readPurchaseTable() {
   const rows = purchaseBody.querySelectorAll('tr[data-row]');
   const records = [];
   rows.forEach((tr, i) => {
     const productId = tr.querySelector('[data-field="product"]').value;
     const sphere = parseFloat(tr.querySelector('[data-field="sphere"]').value);
-    const cylinder = parseFloat(tr.querySelector('[data-field="cylinder"]').value);
-    const axis = parseInt(tr.querySelector('[data-field="axis"]').value, 10);
+    const bcEl = tr.querySelector('[data-field="bc"]');
+    const cylEl = tr.querySelector('[data-field="cylinder"]');
+    const axEl = tr.querySelector('[data-field="axis"]');
     const qty = parseInt(tr.querySelector('[data-field="qty"]').value, 10) || 1;
 
     if (!productId || Number.isNaN(sphere)) return;
+
+    const sphereProd = isSphereProduct(productId);
+    const bc = bcEl ? parseFloat(bcEl.value) : null;
+    const cylinder = cylEl ? parseFloat(cylEl.value) : 0;
+    const axis = axEl ? parseInt(axEl.value, 10) : 0;
+
     records.push({
       lineNum: i + 1,
       productId,
       productName: PRODUCTS[productId]?.name ?? '',
+      kind: sphereProd ? 'sphere' : 'toric',
+      bc: sphereProd && !Number.isNaN(bc) ? bc : null,
       sphere,
-      cylinder: Number.isNaN(cylinder) ? 0 : cylinder,
-      axis: Number.isNaN(axis) ? 0 : axis,
+      cylinder: sphereProd || Number.isNaN(cylinder) ? 0 : cylinder,
+      axis: sphereProd || Number.isNaN(axis) ? 0 : axis,
       qty,
       eye: 'right',
       source: 'manual',
@@ -57,7 +78,7 @@ function renderPurchaseTable(records, snapped) {
 
   if (!records.length) {
     purchaseBody.innerHTML =
-      '<tr><td colspan="7" class="empty-state">请先粘贴采购清单并点击「解析清单」</td></tr>';
+      '<tr><td colspan="8" class="empty-state">请先粘贴采购清单并点击「解析清单」</td></tr>';
     btnPurchaseExport.disabled = true;
     return;
   }
@@ -77,15 +98,29 @@ function renderPurchaseTable(records, snapped) {
       const cartNote =
         cartCount > 1 ? `<br><small class="status-warn">拆为 ${cartCount} 次加购</small>` : '';
 
+      const display = snap?.record || r;
+      const sphereProd = isSphereProduct(display.productId);
+
+      const bcCell = sphereProd
+        ? `<select data-field="bc">${bcOptions(display.bc, display.productId)}</select>`
+        : `<span class="muted">—</span>`;
+      const cylCell = sphereProd
+        ? `<span class="muted">—</span>`
+        : `<input data-field="cylinder" type="number" step="0.25" value="${display.cylinder ?? 0}" />`;
+      const axCell = sphereProd
+        ? `<span class="muted">—</span>`
+        : `<input data-field="axis" type="number" step="1" min="0" max="180" value="${display.axis ?? 0}" />`;
+
       return `
     <tr data-row="${i}" class="${rowClass}">
       <td>
-        <select data-field="product">${productOptions(r.productId)}</select>
+        <select data-field="product">${productOptions(display.productId)}</select>
       </td>
-      <td><input data-field="sphere" type="number" step="0.25" value="${r.sphere}" /></td>
-      <td><input data-field="cylinder" type="number" step="0.25" value="${r.cylinder}" /></td>
-      <td><input data-field="axis" type="number" step="1" min="0" max="180" value="${r.axis}" /></td>
-      <td><input data-field="qty" type="number" min="1" value="${r.qty ?? 1}" style="width:52px" /></td>
+      <td>${bcCell}</td>
+      <td><input data-field="sphere" type="number" step="0.25" value="${display.sphere}" /></td>
+      <td>${cylCell}</td>
+      <td>${axCell}</td>
+      <td><input data-field="qty" type="number" min="1" value="${display.qty ?? 1}" style="width:52px" /></td>
       <td>${status}${cartNote}</td>
       <td><button class="btn btn-secondary btn-del" data-del="${i}" style="padding:4px 10px;font-size:0.8rem">删</button></td>
     </tr>`;
@@ -121,7 +156,7 @@ function handlePurchaseParse() {
   const records = parsePurchaseText(text);
   if (!records.length) {
     purchaseHint.textContent =
-      '未能识别。格式：散光日抛[TAB]-3.25,75,180（2盒）—— 产品名与度数用 Tab 或空格分隔';
+      '未能识别。散光：散光日抛[TAB]-3.25,75,180（2盒）；普通双周：普通双周[TAB]BC8.4 250度(1盒)';
     purchaseHint.className = 'hint hint-error';
     return;
   }
@@ -187,6 +222,6 @@ export function initPurchaseApp() {
 
   purchaseBody.addEventListener('change', () => resnapAndRender());
   purchaseBody.addEventListener('input', (e) => {
-    if (e.target.matches('input')) resnapAndRender();
+    if (e.target.matches('input, select')) resnapAndRender();
   });
 }
