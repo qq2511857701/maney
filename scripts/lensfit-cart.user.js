@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Lensfit 批量加购
 // @namespace    maney-tools
-// @version      1.1.0
+// @version      1.1.1
 // @description  从 maney 工具复制的 JSON 队列，自动填表加入 lensfit 购物车（支持散光与普通 BC 商品）
 // @match        https://www.lensfit.jp/*
 // @grant        GM_setValue
@@ -29,7 +29,7 @@
         #lf-cart-panel {
           position: fixed; bottom: 16px; right: 16px; z-index: 99999;
           background: #fff; border: 1px solid #cfd8dc; border-radius: 10px;
-          box-shadow: 0 4px 20px rgba(0,0,0,.15); padding: 14px; width: 280px;
+          box-shadow: 0 4px 20px rgba(0,0,0,.15); padding: 14px; width: 300px;
           font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
           color: #1a2b3c;
         }
@@ -43,9 +43,15 @@
         #lf-cart-panel button.danger { background: #ffcdd2; }
         #lf-cart-panel .lf-status { margin-top: 8px; font-size: 12px; color: #546e7a; min-height: 36px; }
         #lf-cart-panel .lf-progress { font-weight: 600; color: #1976d2; }
+        #lf-cart-panel .lf-summary {
+          margin-top: 6px; font-size: 12px; color: #37474f;
+          background: #f5f7fa; border-radius: 6px; padding: 8px 10px;
+          white-space: pre-line;
+        }
       </style>
       <h4>Lensfit 批量加购</h4>
       <div class="lf-progress" id="lf-progress">队列：0 条</div>
+      <div class="lf-summary" id="lf-summary">合计：0 盒</div>
       <div class="lf-status" id="lf-status">请先加载采购队列</div>
       <div class="lf-btns">
         <button id="lf-load" class="primary">从剪贴板加载</button>
@@ -62,18 +68,50 @@
     document.getElementById('lf-clear').onclick = clearQueue;
   }
 
+  /** 从 URL 精确取出 /pid/XXX/，避免 JJ2WAO 误匹配 JJ2WAOTR */
+  function pagePid() {
+    const m = location.pathname.match(/\/pid\/([^/]+)\/?/i);
+    return m ? m[1] : '';
+  }
+
+  function isOnProductPage(pid) {
+    return Boolean(pid) && pagePid() === pid;
+  }
+
+  function summarizeQueue(queue) {
+    const items = queue?.items || [];
+    const totalBoxes = items.reduce((sum, it) => sum + (Number(it.qty) || 0), 0);
+    const byProduct = {};
+    for (const it of items) {
+      const name = it.productName || it.pid || '未知';
+      if (!byProduct[name]) byProduct[name] = { lines: 0, boxes: 0 };
+      byProduct[name].lines += 1;
+      byProduct[name].boxes += Number(it.qty) || 0;
+    }
+    const lines = Object.entries(byProduct).map(
+      ([name, v]) => `${name}：${v.lines} 条 / ${v.boxes} 盒`
+    );
+    return {
+      totalLines: items.length,
+      totalBoxes,
+      text: `合计：${items.length} 条 / ${totalBoxes} 盒` + (lines.length ? `\n${lines.join('\n')}` : ''),
+    };
+  }
+
   function updateUI(msg) {
     const queue = GM_getValue(QUEUE_KEY, null);
     const idx = GM_getValue(INDEX_KEY, 0);
     const running = GM_getValue(RUNNING_KEY, false);
-    const total = queue?.items?.length ?? 0;
+    const summary = summarizeQueue(queue);
     const prog = document.getElementById('lf-progress');
+    const summaryEl = document.getElementById('lf-summary');
     const status = document.getElementById('lf-status');
     if (prog) {
       prog.textContent = running
-        ? `进行中 ${idx + 1} / ${total}`
-        : `队列：${total} 条`;
+        ? `进行中 ${idx + 1} / ${summary.totalLines}`
+        : `队列：${summary.totalLines} 条`;
     }
+    if (summaryEl) summaryEl.textContent = summary.text;
     if (status && msg) status.textContent = msg;
   }
 
@@ -85,7 +123,8 @@
       GM_setValue(QUEUE_KEY, data);
       GM_setValue(INDEX_KEY, 0);
       GM_setValue(RUNNING_KEY, false);
-      updateUI(`已加载 ${data.items.length} 条`);
+      const summary = summarizeQueue(data);
+      updateUI(`已加载 ${summary.totalLines} 条，合计 ${summary.totalBoxes} 盒`);
     } catch (e) {
       updateUI('加载失败：' + e.message);
     }
@@ -195,7 +234,8 @@
     let idx = GM_getValue(INDEX_KEY, 0);
     if (!queue?.items?.length || idx >= queue.items.length) {
       GM_setValue(RUNNING_KEY, false);
-      updateUI('全部加购完成，请去购物车结算');
+      const summary = summarizeQueue(queue);
+      updateUI(`全部加购完成（合计 ${summary.totalBoxes} 盒），请去购物车结算`);
       return;
     }
 
@@ -203,8 +243,7 @@
     const label = itemLabel(item);
     updateUI(`正在加购：${label}`);
 
-    const pidMatch = location.pathname.includes(item.pid);
-    if (!pidMatch) {
+    if (!isOnProductPage(item.pid)) {
       location.href = item.url;
       return;
     }
