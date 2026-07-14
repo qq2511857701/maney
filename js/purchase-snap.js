@@ -9,6 +9,8 @@ import {
   formatPwr,
   formatCy,
   formatAx,
+  formatBc,
+  isSphereProduct,
 } from './lensfit-products.js';
 
 function nearest(value, options) {
@@ -57,6 +59,48 @@ export function snapPurchaseRecord(rec) {
     };
   }
 
+  if (isSphereProduct(product)) {
+    return snapSphereRecord(rec, product);
+  }
+  return snapToricRecord(rec, product);
+}
+
+function snapSphereRecord(rec, product) {
+  const pwrOptions = product.pwrOptions ?? PWR_OPTIONS;
+  const bcOptions = product.bcOptions || [8.4, 8.8];
+  const pwr = nearest(rec.sphere, pwrOptions);
+  const bc = nearest(rec.bc ?? bcOptions[0], bcOptions);
+
+  const adjustments = [
+    fmtAdj('基弧 BC', rec.bc ?? bc.value, bc.value, (v) => v.toFixed(1)),
+    fmtAdj('球镜', rec.sphere, pwr.value, (v) => v.toFixed(2)),
+  ].filter(Boolean);
+
+  const snapped = {
+    ...rec,
+    kind: 'sphere',
+    productName: product.name,
+    bc: bc.value,
+    sphere: pwr.value,
+    cylinder: 0,
+    axis: 0,
+    pwr: formatPwr(pwr.value),
+    bcValue: formatBc(bc.value, product.dia || '14.0'),
+    cy: null,
+    ax: null,
+  };
+
+  return {
+    record: snapped,
+    valid: true,
+    error: null,
+    adjustments,
+    changed: adjustments.length > 0,
+    cartItems: splitQty(snapped, product.maxQty),
+  };
+}
+
+function snapToricRecord(rec, product) {
   const pwrOptions = product.pwrOptions ?? PWR_OPTIONS;
   const pwr = nearest(rec.sphere, pwrOptions);
   const cy = nearest(rec.cylinder || 0, CY_OPTIONS);
@@ -70,16 +114,17 @@ export function snapPurchaseRecord(rec) {
 
   const snapped = {
     ...rec,
+    kind: 'toric',
     productName: product.name,
+    bc: null,
     sphere: pwr.value,
     cylinder: cy.value,
     axis: ax.value,
     pwr: formatPwr(pwr.value),
     cy: formatCy(cy.value),
     ax: formatAx(ax.value),
+    bcValue: null,
   };
-
-  const cartItems = splitQty(snapped, product.maxQty);
 
   return {
     record: snapped,
@@ -87,7 +132,7 @@ export function snapPurchaseRecord(rec) {
     error: null,
     adjustments,
     changed: adjustments.length > 0,
-    cartItems,
+    cartItems: splitQty(snapped, product.maxQty),
   };
 }
 
@@ -116,16 +161,22 @@ export function buildCartQueue(snappedResults) {
     if (!r.valid) continue;
     for (const cartRec of r.cartItems) {
       const product = getProduct(cartRec.productId);
-      items.push({
+      const item = {
         pid: cartRec.productId,
         productName: product.name,
         url: product.url,
         eye: 'right',
+        kind: cartRec.kind || (isSphereProduct(product) ? 'sphere' : 'toric'),
         pwr: cartRec.pwr,
-        cy: cartRec.cy,
-        ax: cartRec.ax,
         qty: cartRec.qty,
-      });
+      };
+      if (item.kind === 'sphere') {
+        item.bc = cartRec.bcValue || formatBc(cartRec.bc, product.dia || '14.0');
+      } else {
+        item.cy = cartRec.cy;
+        item.ax = cartRec.ax;
+      }
+      items.push(item);
     }
   }
   return {

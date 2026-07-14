@@ -35,10 +35,25 @@ export const PRODUCTS = {
   JJ2WAOTR: {
     id: 'JJ2WAOTR',
     name: '散光双周',
-    aliases: ['散光双周', '双周', 'オアシス乱視2週', 'アキュビューオアシス 乱視'],
+    aliases: ['散光双周', 'オアシス乱視2週', 'アキュビューオアシス 乱視'],
     url: `${BASE}/JJ2WAOTR/`,
     axOptions: [10, 20, 60, 90, 120, 160, 170, 180],
     maxQty: 2,
+  },
+  JJ2WAO: {
+    id: 'JJ2WAO',
+    name: '普通双周',
+    aliases: ['普通双周', 'アキュビューオアシス', 'オアシス双周'],
+    url: `${BASE}/JJ2WAO/`,
+    kind: 'sphere',
+    bcOptions: [8.4, 8.8],
+    dia: '14.0',
+    maxQty: 2,
+    pwrOptions: [
+      -0.5, -0.75, -1, -1.25, -1.5, -1.75, -2, -2.25, -2.5, -2.75, -3,
+      -3.25, -3.5, -3.75, -4, -4.25, -4.5, -4.75, -5, -5.25, -5.5, -5.75, -6,
+      -6.5, -7, -7.5, -8, -8.5, -9, -9.5, -10, -10.5, -11, -11.5, -12,
+    ],
   },
   CV2WAHGTR: {
     id: 'CV2WAHGTR',
@@ -90,4 +105,16 @@ export function formatCy(v) {
 
 export function formatAx(v) {
   return String(v);
+}
+
+/** lensfit BC 下拉显示值，如 8.4/14.0 */
+export function formatBc(bc, dia = '14.0') {
+  const n = Number(bc);
+  const bcStr = Number.isInteger(n) ? n.toFixed(1) : String(n);
+  return `${bcStr}/${dia}`;
+}
+
+export function isSphereProduct(productOrId) {
+  const p = typeof productOrId === 'string' ? getProduct(productOrId) : productOrId;
+  return Boolean(p?.kind === 'sphere' || p?.bcOptions);
 }

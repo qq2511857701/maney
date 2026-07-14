@@ -9,12 +9,18 @@ const SAMPLE = `散光日抛	－3.25,75,180（2盒）
 散光双周	－6.50，175，170（1盒）
 散光双周	－2.00，175，10（1盒）
 爱尔康月抛	-5.25，125，20(1盒)
-爱尔康月抛	-5.00，125，160(1盒)`;
+爱尔康月抛	-5.00，125，160(1盒)
+普通双周	BC8.4 250度(1盒)
+普通双周	BC8.8 300度(1盒)`;
 
 const records = parsePurchaseText(SAMPLE);
 console.log('Parsed:', records.length, 'records');
 records.forEach((r) =>
-  console.log(`  ${r.productName || '?'} ${r.sphere}/${r.cylinder}×${r.axis} ${r.qty}盒 → ${r.productId}`)
+  console.log(
+    r.kind === 'sphere'
+      ? `  ${r.productName || '?'} BC${r.bc} ${r.sphere} ${r.qty}盒 → ${r.productId}`
+      : `  ${r.productName || '?'} ${r.sphere}/${r.cylinder}×${r.axis} ${r.qty}盒 → ${r.productId}`
+  )
 );
 
 const snapped = snapPurchaseRecords(records);
@@ -29,7 +35,11 @@ snapped.forEach((s) => {
 
 console.log('\nCart queue items:', queue.items.length);
 queue.items.forEach((item, i) =>
-  console.log(`  ${i + 1}. [${item.productName}] ${item.pwr}/${item.cy}×${item.ax} ×${item.qty}`)
+  console.log(
+    item.kind === 'sphere' || item.bc
+      ? `  ${i + 1}. [${item.productName}] BC${item.bc} ${item.pwr} ×${item.qty}`
+      : `  ${i + 1}. [${item.productName}] ${item.pwr}/${item.cy}×${item.ax} ×${item.qty}`
+  )
 );
 
 if (invalid.length) {

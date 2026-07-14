@@ -354,6 +354,10 @@ td input:focus {
   padding: 24px;
 }
 
+.muted {
+  color: #b0bec5;
+}
+
   footer {
     text-align: center;
     font-size: 0.75rem;
